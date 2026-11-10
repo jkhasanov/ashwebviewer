@@ -113,6 +113,12 @@ export interface SamplesPage {
   rows: SampleRow[]
 }
 
+/** The database's own report about a period. One of the two members is set. */
+export interface ActivityReport {
+  html: string | null
+  message: string | null
+}
+
 export interface SqlStat {
   name: string
   unit: 'count' | 'micros' | 'millis' | 'text'
@@ -211,3 +217,10 @@ export const samplesLink = (
   period: [number, number],
   filters: Record<string, string | number | null | undefined>,
 ) => `/db/${targetId}/samples?` + query({ from: Math.floor(period[0]), to: Math.ceil(period[1]), ...filters })
+
+/** The address of the database's own report (Oracle ASH report) for a period. */
+export const reportLink = (
+  targetId: number,
+  period: [number, number],
+  filters: Record<string, string | number | null | undefined>,
+) => `/db/${targetId}/report?` + query({ from: Math.floor(period[0]), to: Math.ceil(period[1]), ...filters })

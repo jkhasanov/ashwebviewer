@@ -169,6 +169,61 @@ public class OracleAshSource implements AshSource {
         return texts;
     }
 
+    /** The report can take much longer to write than the collector's statements may run. */
+    private static final int REPORT_TIMEOUT_SECONDS = 180;
+
+    @Override
+    public Report activityReport(Connection connection, Instant from, Instant to, Long sessionId, String sqlId,
+                                 String waitClass) throws SQLException {
+        // The period is handed over as "so many seconds ago", which the database turns into its own
+        // clock and time zone. That keeps the report on the same stretch of time as the charts even
+        // when the two clocks disagree.
+        Instant now = Instant.now();
+        double fromSecondsAgo = Math.max(0, Duration.between(from, now).toMillis() / 1000.0);
+        double toSecondsAgo = Math.max(0, Duration.between(to, now).toMillis() / 1000.0);
+        // CPU is not a wait class to Oracle, so the report cannot be narrowed to it
+        String reportWaitClass = Sample.CPU.equals(waitClass) || waitClass == null || waitClass.isBlank()
+                ? null : waitClass;
+        StringBuilder html = new StringBuilder();
+        try (PreparedStatement ps = connection.prepareStatement("""
+                SELECT output FROM TABLE(DBMS_WORKLOAD_REPOSITORY.ASH_REPORT_HTML(
+                    TO_NUMBER(SYS_CONTEXT('USERENV', 'DBID')), TO_NUMBER(SYS_CONTEXT('USERENV', 'INSTANCE')),
+                    SYSDATE - ? / 86400, SYSDATE - ? / 86400, 0, 0, ?, ?, ?))""")) {
+            ps.setQueryTimeout(REPORT_TIMEOUT_SECONDS);
+            ps.setDouble(1, fromSecondsAgo);
+            ps.setDouble(2, toSecondsAgo);
+            if (sessionId == null) {
+                ps.setNull(3, java.sql.Types.NUMERIC);
+            } else {
+                ps.setLong(3, sessionId);
+            }
+            ps.setString(4, sqlId == null || sqlId.isBlank() ? null : sqlId);
+            ps.setString(5, reportWaitClass);
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    String line = rs.getString(1);
+                    if (line != null) {
+                        html.append(line);
+                    }
+                    html.append('\n');
+                }
+            }
+        } catch (SQLException e) {
+            String message = e.getMessage() == null ? "" : e.getMessage().strip();
+            // ORA-00904: the package is not visible to this account
+            if (e.getErrorCode() == 904 || e.getErrorCode() == 1031 || e.getErrorCode() == 6550) {
+                return new Report(null, "The monitoring account may not run the report. A DBA can allow it with: "
+                        + "grant execute on dbms_workload_repository to " + connection.getMetaData().getUserName()
+                        + ". (" + message.lines().findFirst().orElse("") + ")");
+            }
+            return new Report(null, "The database could not write the report: " + message);
+        }
+        if (html.toString().isBlank()) {
+            return new Report(null, "The database returned an empty report for this period.");
+        }
+        return new Report(html.toString(), null);
+    }
+
     @Override
     public SqlLiveDetail fetchSqlDetail(Connection connection, String sqlId) {
         List<String> notes = new ArrayList<>();

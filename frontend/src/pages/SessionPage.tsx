@@ -1,7 +1,7 @@
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { useMemo, useState } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
-import { api, query, samplesLink } from '../api'
+import { api, query, reportLink, samplesLink } from '../api'
 import type { SessionInfo, Target, TimeSeries, TopResult } from '../api'
 import { sortWaitClasses, waitClassColor } from '../colors'
 import { ActivityChart } from '../components/ActivityChart'
@@ -187,6 +187,7 @@ export function SessionPage() {
         <span className="period-actions">
           {selection && <button onClick={clearSelection}>Clear selection</button>}
           <Link to={samplesLink(id, period, { sessionId, sessionSerial })}>View samples</Link>
+          {oracle && <Link to={reportLink(id, period, { sessionId })}>ASH report</Link>}
         </span>
       </div>
       <TopTable kind="SQL" title="Statements it ran" result={statements.data} loading={statements.isPending}

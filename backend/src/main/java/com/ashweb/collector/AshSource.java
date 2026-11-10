@@ -30,6 +30,24 @@ public interface AshSource {
     }
 
     /**
+     * A report about a period, written by the database itself.
+     *
+     * @param html    the report as a web page, or null when it could not be produced
+     * @param message why there is no report, or null
+     */
+    record Report(String html, String message) {
+    }
+
+    /**
+     * Asks the database for its own activity report of a period, optionally narrowed to one session,
+     * statement or wait class. Returns null when this kind of database has no such report.
+     */
+    default Report activityReport(Connection connection, Instant from, Instant to, Long sessionId, String sqlId,
+                                  String waitClass) throws SQLException {
+        return null;
+    }
+
+    /**
      * How far the database's clock is ahead of this server's (negative when behind), once known.
      * Sample times are already corrected by it, so everything is stored on this server's timeline.
      */

@@ -31,7 +31,10 @@ public class TargetConnections {
     }
 
     private Properties driverProperties(DbType type, String username, String password) {
-        int readTimeoutSeconds = properties.collector().queryTimeoutSeconds() + 15;
+        return driverProperties(type, username, password, properties.collector().queryTimeoutSeconds() + 15);
+    }
+
+    private Properties driverProperties(DbType type, String username, String password, int readTimeoutSeconds) {
         Properties p = new Properties();
         p.setProperty("user", username);
         p.setProperty("password", password);
@@ -67,8 +70,15 @@ public class TargetConnections {
 
     /** One-off read-only connection for an on-demand lookup. The caller closes it. */
     public Connection open(DbType type, String jdbcUrl, String username, String password) throws SQLException {
+        return open(type, jdbcUrl, username, password, properties.collector().queryTimeoutSeconds() + 15);
+    }
+
+    /** As above, for a lookup whose answer may take up to readTimeoutSeconds to arrive. */
+    public Connection open(DbType type, String jdbcUrl, String username, String password, int readTimeoutSeconds)
+            throws SQLException {
         DriverManager.setLoginTimeout(15);
-        Connection connection = DriverManager.getConnection(jdbcUrl, driverProperties(type, username, password));
+        Connection connection = DriverManager.getConnection(jdbcUrl,
+                driverProperties(type, username, password, readTimeoutSeconds));
         try {
             connection.setReadOnly(true);
         } catch (SQLException e) {

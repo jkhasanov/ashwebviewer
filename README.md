@@ -20,10 +20,12 @@ once. It is a web re-implementation of the ideas in the desktop tool
   over time and the statements it ran.
 - Raw samples: from any chart, statement or session, open the individual samples behind the selected
   period, page through them and download them as CSV.
+- Oracle ASH report: have the database write its own ASH report for the selected period (optionally
+  for one statement, session or wait class), read it in the page and download it.
 - Ten visual styles, switchable from the top bar.
 - Admins add, edit, test, start, stop and delete databases, and manage users. Viewers are read-only.
 
-Not yet built: Oracle ASH report, 10046 tracing, Oracle Standard Edition, Oracle RAC (`gv$`).
+Not yet built: 10046 tracing, Oracle Standard Edition, Oracle RAC (`gv$`).
 
 ## How it is put together
 
@@ -99,6 +101,7 @@ grant create session to ashweb;
 grant select on v_$active_session_history to ashweb;
 grant select on v_$sqlstats to ashweb;
 grant select on v_$sql_plan to ashweb;   -- for execution plans on the SQL detail page
+grant execute on dbms_workload_repository to ashweb;   -- for the ASH report
 ```
 
 PostgreSQL:

@@ -8,6 +8,7 @@ import com.ashweb.activity.ActivityService.SampleRow;
 import com.ashweb.activity.ActivityService.SessionInfo;
 import com.ashweb.activity.ActivityService.TimeSeries;
 import com.ashweb.activity.ActivityService.TopResult;
+import com.ashweb.collector.AshSource;
 import com.ashweb.collector.CollectorManager;
 import com.ashweb.collector.SqlLiveDetail;
 import com.ashweb.collector.TargetConnections;
@@ -354,6 +355,41 @@ public class TargetController {
         } catch (Exception e) {
             return new SqlLiveDetail(List.of(), List.of(),
                     List.of("The database could not be reached: " + CollectorManager.describe(e)));
+        }
+    }
+
+    /**
+     * The database's own report about a period (Oracle's ASH report).
+     *
+     * @param html    the report, to be shown as an isolated document; null when there is none
+     * @param message why there is none, or null
+     */
+    public record ActivityReport(String html, String message) {
+    }
+
+    @GetMapping("/{id}/report")
+    public ActivityReport report(@PathVariable long id, @RequestParam Instant from, @RequestParam Instant to,
+                                 @RequestParam(required = false) String waitClass,
+                                 @RequestParam(required = false) String sqlId,
+                                 @RequestParam(required = false) Long sessionId) {
+        Target target = require(id);
+        checkRange(from, to);
+        if (sqlId != null && !sqlId.isEmpty() && !sqlId.matches("[A-Za-z0-9]{1,40}")) {
+            throw ApiException.badRequest("Not a statement id");
+        }
+        if (waitClass != null && !waitClass.matches("[A-Za-z /]{0,40}")) {
+            throw ApiException.badRequest("Not a wait class");
+        }
+        try (Connection connection = connections.open(target.dbType(), target.jdbcUrl(), target.username(),
+                cipher.decrypt(target.passwordEnc()), 200)) {
+            AshSource.Report report = connections.sourceFor(target.dbType())
+                    .activityReport(connection, from, to, sessionId, sqlId, waitClass);
+            if (report == null) {
+                return new ActivityReport(null, "This kind of database does not write activity reports.");
+            }
+            return new ActivityReport(report.html(), report.message());
+        } catch (Exception e) {
+            return new ActivityReport(null, "The database could not be reached: " + CollectorManager.describe(e));
         }
     }
 

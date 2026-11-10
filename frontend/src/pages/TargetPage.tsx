@@ -1,7 +1,7 @@
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { api, query, samplesLink } from '../api'
+import { api, query, reportLink, samplesLink } from '../api'
 import type { Target, TimeSeries, TopResult } from '../api'
 import { MAX_EVENT_SERIES, OTHER_EVENTS, eventColor, sortWaitClasses, waitClassColor } from '../colors'
 import { ActivityChart } from '../components/ActivityChart'
@@ -259,6 +259,7 @@ export function TargetPage() {
         <span className="period-actions">
           {selection && <button onClick={clearSelection}>Clear selection</button>}
           {period && <Link to={samplesLink(id, period, { waitClass })}>View samples</Link>}
+          {period && t?.dbType === 'ORACLE' && <Link to={reportLink(id, period, { waitClass })}>ASH report</Link>}
         </span>
       </div>
 
