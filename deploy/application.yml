@@ -2,7 +2,7 @@
 
 server:
   port: 8080
-  # Put the application behind HTTPS (for example an nginx reverse proxy) and then uncomment:
+  # Put the application behind HTTPS (see nginx.conf next to this file) and then uncomment:
   # forward-headers-strategy: native
   # servlet:
   #   session:
@@ -26,6 +26,7 @@ ashweb:
     oracle-interval-ms: 5000
     postgres-interval-ms: 1000
     initial-load-minutes: 60
+  # How long history is kept. A database can have its own values (Databases > Edit).
   retention:
     # Individual samples (short ranges, second-level detail)
     raw-days: 7

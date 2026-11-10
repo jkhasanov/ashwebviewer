@@ -7,7 +7,7 @@ once. It is a web re-implementation of the ideas in the desktop tool
 - **Oracle Enterprise Edition**: reads `v$active_session_history` (requires the Diagnostic Pack licence).
 - **PostgreSQL**: samples `pg_stat_activity` once a second.
 
-## What it does (version 0.1)
+## What it does (version 0.2)
 
 - Overview of every database: collector status, current load, wait mix, last hour.
 - Top Activity per database: stacked chart of average active sessions by wait class, live (last hour,
@@ -24,6 +24,7 @@ once. It is a web re-implementation of the ideas in the desktop tool
   for one statement, session or wait class), read it in the page and download it.
 - Ten visual styles, switchable from the top bar.
 - Admins add, edit, test, start, stop and delete databases, and manage users. Viewers are read-only.
+- Retention is set for the server and can be overridden per database.
 
 Not yet built: 10046 tracing, Oracle Standard Edition, Oracle RAC (`gv$`).
 
@@ -88,8 +89,35 @@ http://localhost:5173 (API calls are proxied to port 8080).
 3. Read the first admin password from the log (`journalctl -u ashweb | grep "Created user"`), sign in at
    `http://server:8080` and change it.
 
-Put the server behind HTTPS (for example nginx) before using it outside a trusted network; see the
-comments in `deploy/application.yml`.
+A ready-built `ashweb.jar` is attached to each
+[release](https://github.com/jkhasanov/ashwebviewer/releases), so the server itself only needs Java 21.
+
+### HTTPS
+
+Put the server behind HTTPS before using it outside a trusted network. `deploy/nginx.conf` is a working
+example for nginx. After it is in place, uncomment the three HTTPS settings in
+`/opt/ashweb/config/application.yml` (`forward-headers-strategy` and the secure session cookie) and
+restart the service.
+
+### Monitoring
+
+`GET /api/health` needs no sign-in and answers `{"status":"UP"}`, or status 503 when the storage
+database cannot be reached. The state of each collector is on the Overview page.
+
+### Retention
+
+`ashweb.retention` in `application.yml` sets how many days of samples and of per-minute totals are kept
+(7 and 90 unless changed). An admin can give a database its own values under Databases > Edit. Storage is
+freed by dropping whole daily partitions once they are older than the longest retention in use; databases
+that keep less have their older rows deleted hourly.
+
+### Backup and upgrade
+
+- Back up the storage database (`pg_dump ashweb`) and the key file (`/opt/ashweb/data/master.key`).
+  The key file is small and never changes; without it the stored database passwords cannot be read.
+- To upgrade, replace `/opt/ashweb/ashweb.jar` and run `sudo systemctl restart ashweb`. The storage
+  database is brought up to date automatically on start. Collection pauses during the restart; Oracle
+  databases are caught up afterwards from their own history, PostgreSQL databases have a gap.
 
 ## Accounts needed on monitored databases
 

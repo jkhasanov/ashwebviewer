@@ -19,7 +19,8 @@ public class TargetRepository {
     private static Target map(ResultSet rs, int row) throws SQLException {
         return new Target(rs.getLong("id"), rs.getString("name"), DbType.valueOf(rs.getString("db_type")),
                 rs.getString("jdbc_url"), rs.getString("username"), rs.getString("password_enc"),
-                rs.getBoolean("enabled"));
+                rs.getBoolean("enabled"), rs.getObject("raw_days", Integer.class),
+                rs.getObject("rollup_days", Integer.class));
     }
 
     public List<Target> findAll() {
@@ -36,17 +37,31 @@ public class TargetRepository {
     }
 
     public long insert(String name, DbType type, String url, String username, String passwordEnc, boolean enabled) {
+        return insert(name, type, url, username, passwordEnc, enabled, null, null);
+    }
+
+    public long insert(String name, DbType type, String url, String username, String passwordEnc, boolean enabled,
+                       Integer rawDays, Integer rollupDays) {
         return jdbc.sql("""
-                insert into target (name, db_type, jdbc_url, username, password_enc, enabled)
-                values (?, ?, ?, ?, ?, ?) returning id""")
-                .params(name, type.name(), url, username, passwordEnc, enabled).query(Long.class).single();
+                insert into target (name, db_type, jdbc_url, username, password_enc, enabled, raw_days, rollup_days)
+                values (:name, :type, :url, :username, :password, :enabled, :rawDays, :rollupDays) returning id""")
+                .param("name", name).param("type", type.name()).param("url", url).param("username", username)
+                .param("password", passwordEnc).param("enabled", enabled)
+                .param("rawDays", rawDays, java.sql.Types.INTEGER)
+                .param("rollupDays", rollupDays, java.sql.Types.INTEGER)
+                .query(Long.class).single();
     }
 
     public void update(Target t) {
         jdbc.sql("""
-                update target set name = ?, db_type = ?, jdbc_url = ?, username = ?, password_enc = ?, enabled = ?,
-                       updated_at = now() where id = ?""")
-                .params(t.name(), t.dbType().name(), t.jdbcUrl(), t.username(), t.passwordEnc(), t.enabled(), t.id())
+                update target set name = :name, db_type = :type, jdbc_url = :url, username = :username,
+                       password_enc = :password, enabled = :enabled, raw_days = :rawDays,
+                       rollup_days = :rollupDays, updated_at = now() where id = :id""")
+                .param("name", t.name()).param("type", t.dbType().name()).param("url", t.jdbcUrl())
+                .param("username", t.username()).param("password", t.passwordEnc()).param("enabled", t.enabled())
+                .param("rawDays", t.rawDays(), java.sql.Types.INTEGER)
+                .param("rollupDays", t.rollupDays(), java.sql.Types.INTEGER)
+                .param("id", t.id())
                 .update();
     }
 

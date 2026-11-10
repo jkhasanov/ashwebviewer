@@ -175,6 +175,7 @@ main { padding: 16px 20px 40px; max-width: 1600px; margin: 0 auto; display: flex
 .form label input, .form label select { font-weight: 400; font-size: 1rem; }
 .form label small { font-weight: 400; color: var(--text-secondary); }
 .form label.check { flex-direction: row; align-items: center; gap: 8px; font-weight: 400; font-size: 1rem; }
+.form-pair { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr)); gap: 12px; }
 .form-actions { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; margin-top: 4px; }
 .form p { overflow-wrap: anywhere; }
 .sql-full { margin: 0; padding: 6px 16px 16px; white-space: pre-wrap; overflow-wrap: anywhere; max-height: 70vh; overflow-y: auto; font-family: var(--font-mono); font-size: 0.9rem; }

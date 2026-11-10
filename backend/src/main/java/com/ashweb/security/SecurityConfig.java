@@ -36,6 +36,8 @@ public class SecurityConfig {
         http
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(HttpMethod.POST, "/api/auth/login").permitAll()
+                        // For load balancers and monitoring; says only UP or DOWN
+                        .requestMatchers(HttpMethod.GET, "/api/health").permitAll()
                         .requestMatchers("/api/auth/**").authenticated()
                         .requestMatchers("/api/users/**").hasRole("ADMIN")
                         // Viewers may read everything else; any change needs the admin role

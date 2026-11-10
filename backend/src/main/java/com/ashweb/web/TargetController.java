@@ -13,10 +13,13 @@ import com.ashweb.collector.CollectorManager;
 import com.ashweb.collector.SqlLiveDetail;
 import com.ashweb.collector.TargetConnections;
 import com.ashweb.security.SecretCipher;
+import com.ashweb.storage.PartitionManager;
 import com.ashweb.target.DbType;
 import com.ashweb.target.Target;
 import com.ashweb.target.TargetRepository;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
@@ -59,11 +62,20 @@ public class TargetController {
             @NotBlank @Size(max = 2000) String jdbcUrl,
             @NotBlank @Size(max = 200) String username,
             @Size(max = 1000) String password,
-            Boolean enabled) {
+            Boolean enabled,
+            @Min(1) @Max(3650) Integer rawDays,
+            @Min(1) @Max(3650) Integer rollupDays) {
     }
 
-    /** The stored password is never sent back. */
+    /**
+     * The stored password is never sent back.
+     *
+     * @param rawDays        days its samples are kept when it has its own setting, else null
+     * @param rollupDays     days its per-minute totals are kept when it has its own setting, else null
+     * @param defaultRawDays what applies without an own setting
+     */
     public record TargetView(long id, String name, DbType dbType, String jdbcUrl, String username, boolean enabled,
+                             Integer rawDays, Integer rollupDays, int defaultRawDays, int defaultRollupDays,
                              CollectorManager.Status collector, Double avgActiveSessions,
                              Map<String, Double> byWaitClass, double[] spark) {
     }
@@ -76,9 +88,11 @@ public class TargetController {
     private final TargetConnections connections;
     private final SecretCipher cipher;
     private final ActivityService activity;
+    private final PartitionManager partitions;
 
     public TargetController(TargetRepository targets, CollectorManager collectors, TargetConnections connections,
-                            SecretCipher cipher, ActivityService activity) {
+                            SecretCipher cipher, ActivityService activity, PartitionManager partitions) {
+        this.partitions = partitions;
         this.targets = targets;
         this.collectors = collectors;
         this.connections = connections;
@@ -88,6 +102,7 @@ public class TargetController {
 
     private TargetView view(Target t, OverviewRow load) {
         return new TargetView(t.id(), t.name(), t.dbType(), t.jdbcUrl(), t.username(), t.enabled(),
+                t.rawDays(), t.rollupDays(), partitions.defaults().rawDays(), partitions.defaults().rollupDays(),
                 collectors.status(t.id()),
                 load == null ? null : load.avgActiveSessions(),
                 load == null ? Map.of() : load.byWaitClass(),
@@ -118,7 +133,8 @@ public class TargetController {
         }
         boolean enabled = body.enabled() == null || body.enabled();
         long id = targets.insert(body.name().strip(), body.dbType(), body.jdbcUrl().strip(), body.username().strip(),
-                cipher.encrypt(body.password()), enabled);
+                cipher.encrypt(body.password()), enabled, body.rawDays(), body.rollupDays());
+        partitions.reload();
         Target created = require(id);
         if (enabled) {
             collectors.start(created);
@@ -133,8 +149,9 @@ public class TargetController {
         boolean keepPassword = body.password() == null || body.password().isEmpty();
         Target updated = new Target(id, body.name().strip(), body.dbType(), body.jdbcUrl().strip(),
                 body.username().strip(), keepPassword ? existing.passwordEnc() : cipher.encrypt(body.password()),
-                body.enabled() == null ? existing.enabled() : body.enabled());
+                body.enabled() == null ? existing.enabled() : body.enabled(), body.rawDays(), body.rollupDays());
         targets.update(updated);
+        partitions.reload();
         if (updated.enabled()) {
             collectors.start(updated);
         } else {
@@ -165,6 +182,7 @@ public class TargetController {
         require(id);
         collectors.stop(id);
         targets.delete(id);
+        partitions.reload();
     }
 
     /**
@@ -259,7 +277,7 @@ public class TargetController {
         activity.forEachSample(id, from, to, filter, order.equals("asc"), Math.max(1, Math.min(limit, 1000)), offset,
                 keys, rows::add);
         long total = activity.countSamples(id, from, to, filter, MAX_SAMPLES);
-        return new SamplesPage(from, to, activity.samplesKeptSince(), keys, Math.min(total, MAX_SAMPLES),
+        return new SamplesPage(from, to, activity.samplesKeptSince(id), keys, Math.min(total, MAX_SAMPLES),
                 total > MAX_SAMPLES, offset, rows);
     }
 
@@ -397,6 +415,12 @@ public class TargetController {
         validateUrl(body);
         if (targets.nameTaken(body.name().strip(), id)) {
             throw ApiException.badRequest("A database named '" + body.name().strip() + "' already exists");
+        }
+        int rawDays = body.rawDays() == null ? partitions.defaults().rawDays() : body.rawDays();
+        int rollupDays = body.rollupDays() == null ? partitions.defaults().rollupDays() : body.rollupDays();
+        if (rollupDays < rawDays) {
+            throw ApiException.badRequest("Per-minute totals must be kept at least as long as samples ("
+                    + rawDays + " days)");
         }
     }
 

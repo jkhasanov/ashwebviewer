@@ -65,7 +65,7 @@ public class SampleWriter {
 
     /** @return number of rows stored (samples older than the raw retention are skipped) */
     public int write(long targetId, List<Sample> batch) {
-        Instant cutoff = partitions.rawCutoff();
+        Instant cutoff = partitions.rawCutoff(targetId);
         List<Sample> samples = batch.stream().filter(s -> !s.sampleTime().isBefore(cutoff)).toList();
         if (samples.isEmpty()) {
             return 0;

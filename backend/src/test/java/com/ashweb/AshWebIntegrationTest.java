@@ -137,9 +137,19 @@ class AshWebIntegrationTest {
         assertThat(send(admin, adminCookies, "POST", "/api/targets",
                 body.replace("jdbc:postgresql:", "jdbc:h2:")).statusCode()).isEqualTo(400);
 
+        // Retention of one database: within limits, and totals kept at least as long as samples
+        String open = body.substring(0, body.length() - 1);
+        assertThat(send(admin, adminCookies, "POST", "/api/targets", open + ",\"rawDays\":0}").statusCode())
+                .isEqualTo(400);
+        HttpResponse<String> tooShort = send(admin, adminCookies, "POST", "/api/targets",
+                open + ",\"rawDays\":30,\"rollupDays\":10}");
+        assertThat(tooShort.statusCode()).isEqualTo(400);
+        assertThat(tooShort.body()).contains("at least as long");
+
         HttpResponse<String> created = send(admin, adminCookies, "POST", "/api/targets", body);
         assertThat(created.statusCode()).as(created.body()).isEqualTo(200);
-        assertThat(created.body()).doesNotContain("password");
+        assertThat(created.body()).doesNotContain("password").contains("\"rawDays\":null")
+                .contains("\"defaultRawDays\":7").contains("\"defaultRollupDays\":90");
         targetId = idIn(created.body());
 
         String stored = jdbc.queryForObject("select password_enc from target where id = ?", String.class, targetId);
@@ -309,7 +319,12 @@ class AshWebIntegrationTest {
 
     @Test
     @Order(8)
-    void retentionDropsOldPartitions() {
+    void retentionDropsOldPartitionsAndHealthNeedsNoSignIn() throws Exception {
+        HttpResponse<String> health = send(HttpClient.newHttpClient(), new CookieManager(), "GET", "/api/health",
+                null);
+        assertThat(health.statusCode()).isEqualTo(200);
+        assertThat(health.body()).isEqualTo("{\"status\":\"UP\"}");
+
         java.time.LocalDate old = java.time.LocalDate.now(java.time.ZoneOffset.UTC).minusDays(30);
         partitions.ensure(PartitionManager.RAW, old);
         String name = "ash_sample_p" + java.time.format.DateTimeFormatter.BASIC_ISO_DATE.format(old);
@@ -318,6 +333,30 @@ class AshWebIntegrationTest {
         partitions.maintain();
         assertThat(jdbc.queryForObject("select count(*) from pg_class where relname = ?", Long.class, name))
                 .isZero();
+        // A database with its own, shorter retention loses its older rows; the others keep theirs
+        Long shortId = jdbc.queryForObject("""
+                insert into target (name, db_type, jdbc_url, username, password_enc, enabled, raw_days)
+                values ('short', 'POSTGRES', 'jdbc:postgresql://localhost:1/x', 'u', 'x', false, 2)
+                returning id""", Long.class);
+        Long defaultId = jdbc.queryForObject("""
+                insert into target (name, db_type, jdbc_url, username, password_enc, enabled)
+                values ('default', 'POSTGRES', 'jdbc:postgresql://localhost:1/x', 'u', 'x', false)
+                returning id""", Long.class);
+        java.time.LocalDate threeDaysAgo = java.time.LocalDate.now(java.time.ZoneOffset.UTC).minusDays(3);
+        partitions.ensure(PartitionManager.RAW, threeDaysAgo);
+        for (Long id : java.util.List.of(shortId, defaultId)) {
+            jdbc.update("""
+                    insert into ash_sample (target_id, sample_time, session_id, session_serial, wait_class, event)
+                    values (?, ?, 1, 1, 'CPU', 'CPU'), (?, now(), 1, 1, 'CPU', 'CPU')""",
+                    id, threeDaysAgo.atTime(12, 0).atOffset(java.time.ZoneOffset.UTC), id);
+        }
+        partitions.maintain();
+        assertThat(jdbc.queryForObject("select count(*) from ash_sample where target_id = ?", Long.class, shortId))
+                .isEqualTo(1);
+        assertThat(jdbc.queryForObject("select count(*) from ash_sample where target_id = ?", Long.class, defaultId))
+                .isEqualTo(2);
+        assertThat(partitions.rawCutoff(shortId)).isAfter(partitions.rawCutoff(defaultId));
+
         // Rollup retention is longer (90 days), so a 30 day old rollup partition stays
         partitions.ensure(PartitionManager.ROLLUP, old);
         partitions.maintain();

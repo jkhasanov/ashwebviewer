@@ -25,6 +25,11 @@ export interface Target {
   jdbcUrl: string
   username: string
   enabled: boolean
+  /** Days its samples / per-minute totals are kept when it has its own setting, else null. */
+  rawDays: number | null
+  rollupDays: number | null
+  defaultRawDays: number
+  defaultRollupDays: number
   collector: CollectorStatus
   avgActiveSessions: number | null
   byWaitClass: Record<string, number>
@@ -38,6 +43,8 @@ export interface TargetInput {
   username: string
   password: string
   enabled: boolean
+  rawDays: number | null
+  rollupDays: number | null
 }
 
 export interface TimeSeries {

@@ -19,7 +19,16 @@ const NEEDS: Record<DbType, string> = {
     'Samples pg_stat_activity once a second. Give the account the pg_read_all_stats role so it can see other users’ sessions and statements.',
 }
 
-function DatabaseForm({ existing, onClose }: { existing: Target | null; onClose: () => void }) {
+interface Defaults { rawDays: number; rollupDays: number }
+
+const days = (value: string) => (value === '' ? null : Number(value))
+
+function DatabaseForm({ existing, defaults, onClose }: {
+  existing: Target | null
+  /** The server's retention, when known (it comes with the list of databases). */
+  defaults: Defaults | null
+  onClose: () => void
+}) {
   const queryClient = useQueryClient()
   const [form, setForm] = useState<TargetInput>({
     name: existing?.name ?? '',
@@ -28,6 +37,8 @@ function DatabaseForm({ existing, onClose }: { existing: Target | null; onClose:
     username: existing?.username ?? '',
     password: '',
     enabled: existing?.enabled ?? true,
+    rawDays: existing?.rawDays ?? null,
+    rollupDays: existing?.rollupDays ?? null,
   })
   const [error, setError] = useState<string | null>(null)
   const [test, setTest] = useState<{ ok: boolean; message: string } | null>(null)
@@ -91,6 +102,22 @@ function DatabaseForm({ existing, onClose }: { existing: Target | null; onClose:
                  placeholder={existing ? 'Leave empty to keep the stored password' : ''} />
           <small>Stored encrypted on the server and never shown again.</small>
         </label>
+        <div className="form-pair">
+          <label>Keep samples (days)
+            <input type="number" min={1} max={3650} value={form.rawDays ?? ''}
+                   onChange={(e) => set('rawDays', days(e.target.value))}
+                   placeholder={defaults ? `Server setting (${defaults.rawDays})` : 'Server setting'} />
+          </label>
+          <label>Keep per-minute totals (days)
+            <input type="number" min={1} max={3650} value={form.rollupDays ?? ''}
+                   onChange={(e) => set('rollupDays', days(e.target.value))}
+                   placeholder={defaults ? `Server setting (${defaults.rollupDays})` : 'Server setting'} />
+          </label>
+        </div>
+        <small className="muted">
+          Samples give second-level detail for short ranges; totals feed the long-range charts. Leave empty to use
+          the server’s setting. Shortening removes older data within the hour.
+        </small>
         <label className="check">
           <input type="checkbox" checked={form.enabled} onChange={(e) => set('enabled', e.target.checked)} />
           Collect from this database
@@ -143,7 +170,7 @@ export function DatabasesPage() {
         <div className="table-scroll">
           <table className="data-table">
             <thead>
-              <tr><th>Name</th><th>Type</th><th>JDBC URL</th><th>Username</th><th>Collector</th><th className="num">Rows collected</th><th></th></tr>
+              <tr><th>Name</th><th>Type</th><th>JDBC URL</th><th>Username</th><th>Collector</th><th className="num">Rows collected</th><th title="Days samples are kept / days per-minute totals are kept">Keeps</th><th></th></tr>
             </thead>
             <tbody>
               {(targets.data ?? []).map((t) => (
@@ -159,6 +186,9 @@ export function DatabasesPage() {
                     )}
                   </td>
                   <td className="num">{t.collector.rowsCollected.toLocaleString()}</td>
+                  <td title="Days samples are kept / days per-minute totals are kept">
+                    {t.rawDays ?? t.defaultRawDays} d / {t.rollupDays ?? t.defaultRollupDays} d
+                  </td>
                   <td className="row-actions">
                     {t.enabled
                       ? <button onClick={() => act('POST', `/api/targets/${t.id}/stop`)}>Stop</button>
@@ -169,14 +199,19 @@ export function DatabasesPage() {
                 </tr>
               ))}
               {targets.data?.length === 0 && (
-                <tr><td colSpan={7} className="muted">No databases yet. Add one to start collecting.</td></tr>
+                <tr><td colSpan={8} className="muted">No databases yet. Add one to start collecting.</td></tr>
               )}
             </tbody>
           </table>
         </div>
       </section>
 
-      {editing && <DatabaseForm existing={editing === 'new' ? null : editing} onClose={() => setEditing(null)} />}
+      {editing && (
+        <DatabaseForm existing={editing === 'new' ? null : editing} onClose={() => setEditing(null)}
+                      defaults={targets.data?.[0]
+                        ? { rawDays: targets.data[0].defaultRawDays, rollupDays: targets.data[0].defaultRollupDays }
+                        : null} />
+      )}
       {deleting && (
         <Modal title={`Delete ${deleting.name}?`} onClose={() => setDeleting(null)}>
           <div className="form">

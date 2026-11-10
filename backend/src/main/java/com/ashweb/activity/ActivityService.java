@@ -116,8 +116,9 @@ public class ActivityService {
         static final Source ROLLUP = new Source("ash_rollup_1m", "bucket", "sum(samples)", false);
     }
 
-    private Source sourceFor(Instant from, Instant to) {
-        boolean raw = Duration.between(from, to).compareTo(RAW_MAX_RANGE) <= 0 && !from.isBefore(partitions.rawCutoff());
+    private Source sourceFor(long targetId, Instant from, Instant to) {
+        boolean raw = Duration.between(from, to).compareTo(RAW_MAX_RANGE) <= 0
+                && !from.isBefore(partitions.rawCutoff(targetId));
         return raw ? Source.RAW : Source.ROLLUP;
     }
 
@@ -140,7 +141,7 @@ public class ActivityService {
         if (!from.isBefore(to)) {
             from = to.minusSeconds(60);
         }
-        Source source = sourceFor(from, to);
+        Source source = sourceFor(targetId, from, to);
         long wanted = Math.max(1, Duration.between(from, to).getSeconds() / TARGET_POINTS);
         long bucket = BUCKET_SECONDS[BUCKET_SECONDS.length - 1];
         for (long candidate : BUCKET_SECONDS) {
@@ -204,7 +205,7 @@ public class ActivityService {
 
     /** The statements or sessions responsible for most of the activity in a period. */
     public TopResult top(long targetId, Instant from, Instant to, Dimension dimension, Filter filter, int limit) {
-        Source source = sourceFor(from, to);
+        Source source = sourceFor(targetId, from, to);
         if (!source.raw()) {
             // The rollup has one-minute resolution
             from = floor(from, 60);
@@ -399,9 +400,9 @@ public class ActivityService {
         return count == null ? 0 : count;
     }
 
-    /** Samples older than this have been removed; only per-minute totals remain. */
-    public Instant samplesKeptSince() {
-        return partitions.rawCutoff();
+    /** Samples of this database older than this have been removed; only per-minute totals remain. */
+    public Instant samplesKeptSince(long targetId) {
+        return partitions.rawCutoff(targetId);
     }
 
     /** Statement type (SELECT, UPDATE...) as last seen in the samples, or null. */
