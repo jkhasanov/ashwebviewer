@@ -24,6 +24,11 @@ public interface AshSource {
         return Map.of();
     }
 
+    /** Reads plans and statistics of one statement from the database. Never throws for missing privileges. */
+    default SqlLiveDetail fetchSqlDetail(Connection connection, String sqlId) throws SQLException {
+        return new SqlLiveDetail(List.of(), List.of(), List.of("Not available for this kind of database."));
+    }
+
     /**
      * How far the database's clock is ahead of this server's (negative when behind), once known.
      * Sample times are already corrected by it, so everything is stored on this server's timeline.

@@ -65,6 +65,18 @@ public class TargetConnections {
         return new HikariDataSource(config);
     }
 
+    /** One-off read-only connection for an on-demand lookup. The caller closes it. */
+    public Connection open(DbType type, String jdbcUrl, String username, String password) throws SQLException {
+        DriverManager.setLoginTimeout(15);
+        Connection connection = DriverManager.getConnection(jdbcUrl, driverProperties(type, username, password));
+        try {
+            connection.setReadOnly(true);
+        } catch (SQLException e) {
+            // A hint only; the statements run here are SELECTs
+        }
+        return connection;
+    }
+
     /** Opens a one-off connection and runs the source's probe statement. Throws with the database's message. */
     public String test(DbType type, String jdbcUrl, String username, String password) throws SQLException {
         DriverManager.setLoginTimeout(15);

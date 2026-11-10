@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom'
 import type { TopResult, TopRow } from '../api'
 import { sortWaitClasses, waitClassColor } from '../colors'
 import { formatAas } from '../format'
@@ -24,16 +25,23 @@ interface Props {
   result: TopResult | undefined
   loading: boolean
   error: string | null
-  onSqlClick: (row: TopRow) => void
+  /** Where a SQL ID leads (the statement's detail page). Without it SQL IDs are plain text. */
+  sqlLink?: (sqlId: string) => string
+  title?: string
+  /**
+   * Show the serial number next to the session id (Oracle, where "sid,serial#" names a session and one sid
+   * is reused by many short sessions).
+   */
+  showSerial?: boolean
 }
 
 /** Statements or sessions ranked by their share of the activity in the selected period. */
-export function TopTable({ kind, result, loading, error, onSqlClick }: Props) {
+export function TopTable({ kind, result, loading, error, sqlLink, title, showSerial }: Props) {
   const rows = result?.rows ?? []
   const maxSamples = rows.length ? rows[0].samples : 1
   return (
     <section className="panel top-panel">
-      <h3>{kind === 'SQL' ? 'Top SQL' : 'Top sessions'}</h3>
+      <h3>{title ?? (kind === 'SQL' ? 'Top SQL' : 'Top sessions')}</h3>
       {error && <p className="error-text">{error}</p>}
       {!error && rows.length === 0 && (
         <p className="muted pad">{loading ? 'Loading…' : 'No activity in this period.'}</p>
@@ -68,11 +76,7 @@ export function TopTable({ kind, result, loading, error, onSqlClick }: Props) {
                     <td className="num">{formatAas(row.avgActiveSessions)}</td>
                     <td className="mono">
                       {row.sqlId ? (
-                        row.sqlText ? (
-                          <button className="link-button mono" onClick={() => onSqlClick(row)}>{row.sqlId}</button>
-                        ) : (
-                          row.sqlId
-                        )
+                        sqlLink ? <Link to={sqlLink(row.sqlId)}>{row.sqlId}</Link> : row.sqlId
                       ) : (
                         <span className="muted">no statement</span>
                       )}
@@ -84,7 +88,9 @@ export function TopTable({ kind, result, loading, error, onSqlClick }: Props) {
                   <tr key={`${row.sessionId}:${row.sessionSerial}`}>
                     <td><ActivityBar row={row} maxSamples={maxSamples} /></td>
                     <td className="num">{formatAas(row.avgActiveSessions)}</td>
-                    <td className="mono" title={`Serial ${row.sessionSerial}`}>{row.sessionId}</td>
+                    <td className="mono" title={showSerial ? 'Session id, serial number' : undefined}>
+                      {row.sessionId}{showSerial && <span className="muted">,{row.sessionSerial}</span>}
+                    </td>
                     <td>{row.userName ?? ''}</td>
                     <td className="ellipsis" title={row.program ?? undefined}>{row.program ?? ''}</td>
                   </tr>

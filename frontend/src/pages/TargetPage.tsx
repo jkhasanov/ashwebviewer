@@ -2,11 +2,10 @@ import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { api, query } from '../api'
-import type { Target, TimeSeries, TopResult, TopRow } from '../api'
+import type { Target, TimeSeries, TopResult } from '../api'
 import { MAX_EVENT_SERIES, OTHER_EVENTS, eventColor, sortWaitClasses, waitClassColor } from '../colors'
 import { ActivityChart } from '../components/ActivityChart'
 import type { ChartSeries } from '../components/ActivityChart'
-import { Modal } from '../components/Modal'
 import { StatusBadge } from '../components/StatusBadge'
 import { TopTable } from '../components/TopTable'
 import { DB_TYPE_LABEL, formatDuration, formatRange, toLocalInput } from '../format'
@@ -34,19 +33,6 @@ const WAIT_CLASSES = {
   POSTGRES: ['CPU', 'IO', 'Lock', 'LWLock', 'BufferPin', 'Activity', 'Extension', 'Client', 'IPC', 'Timeout'],
 } as const
 
-function SqlTextModal({ targetId, row, onClose }: { targetId: number; row: TopRow; onClose: () => void }) {
-  const full = useQuery({
-    queryKey: ['sql', targetId, row.sqlId],
-    queryFn: () => api<{ sqlText: string }>('GET', `/api/targets/${targetId}/sql/${encodeURIComponent(row.sqlId!)}`),
-  })
-  return (
-    <Modal title={`SQL ID ${row.sqlId}`} onClose={onClose} wide>
-      <pre className="sql-full">{full.data?.sqlText ?? row.sqlText ?? ''}</pre>
-      {full.error && <p className="error-text">{full.error.message}</p>}
-    </Modal>
-  )
-}
-
 export function TargetPage() {
   const id = Number(useParams().id)
   const theme = useTheme()
@@ -61,7 +47,6 @@ export function TargetPage() {
   const [waitClass, setWaitClass] = useState('')
   const [selection, setSelection] = useState<[number, number] | null>(null)
   const [clearSignal, setClearSignal] = useState(0)
-  const [sqlRow, setSqlRow] = useState<TopRow | null>(null)
 
   const live = preset === 'live'
   const customError = preset === 'custom' && new Date(customFrom).getTime() >= new Date(customTo).getTime()
@@ -172,6 +157,12 @@ export function TargetPage() {
   const t = target.data
   const period = selection ?? (topSql.data ? [new Date(topSql.data.from).getTime(), new Date(topSql.data.to).getTime()] as [number, number] : null)
   const noData = chart !== null && chart.series.length === 0
+  // A statement's page opens on the same stretch of time this chart shows
+  const sqlLink = (sqlId: string) => {
+    const from = data ? new Date(data.from).getTime() : Date.now() - HOUR
+    const to = data ? new Date(data.to).getTime() : Date.now()
+    return `/db/${id}/sql/${encodeURIComponent(sqlId)}?from=${from}&to=${to}`
+  }
 
   return (
     <>
@@ -265,12 +256,11 @@ export function TargetPage() {
 
       <div className="top-grid">
         <TopTable kind="SQL" result={topSql.data} loading={topSql.isPending} error={topSql.error?.message ?? null}
-                  onSqlClick={setSqlRow} />
+                  sqlLink={sqlLink} />
         <TopTable kind="SESSION" result={topSessions.data} loading={topSessions.isPending}
-                  error={topSessions.error?.message ?? null} onSqlClick={setSqlRow} />
+                  error={topSessions.error?.message ?? null} showSerial={t?.dbType === 'ORACLE'} />
       </div>
 
-      {sqlRow && <SqlTextModal targetId={id} row={sqlRow} onClose={() => setSqlRow(null)} />}
     </>
   )
 }

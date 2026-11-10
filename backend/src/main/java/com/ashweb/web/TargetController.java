@@ -6,6 +6,7 @@ import com.ashweb.activity.ActivityService.OverviewRow;
 import com.ashweb.activity.ActivityService.TimeSeries;
 import com.ashweb.activity.ActivityService.TopResult;
 import com.ashweb.collector.CollectorManager;
+import com.ashweb.collector.SqlLiveDetail;
 import com.ashweb.collector.TargetConnections;
 import com.ashweb.security.SecretCipher;
 import com.ashweb.target.DbType;
@@ -15,6 +16,7 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
+import java.sql.Connection;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
@@ -175,29 +177,47 @@ public class TargetController {
 
     @GetMapping("/{id}/activity")
     public TimeSeries activity(@PathVariable long id, @RequestParam Instant from, @RequestParam Instant to,
-                               @RequestParam(required = false) String waitClass) {
+                               @RequestParam(required = false) String waitClass,
+                               @RequestParam(required = false) String sqlId) {
         require(id);
         checkRange(from, to);
-        return activity.timeSeries(id, from, to, waitClass);
+        return activity.timeSeries(id, from, to, waitClass, sqlId);
     }
 
     @GetMapping("/{id}/top")
     public TopResult top(@PathVariable long id, @RequestParam Instant from, @RequestParam Instant to,
                          @RequestParam Dimension dimension, @RequestParam(required = false) String waitClass,
+                         @RequestParam(required = false) String sqlId,
                          @RequestParam(defaultValue = "30") int limit) {
         require(id);
         checkRange(from, to);
-        return activity.top(id, from, to, dimension, waitClass, Math.max(1, Math.min(limit, 200)));
+        return activity.top(id, from, to, dimension, waitClass, sqlId, Math.max(1, Math.min(limit, 200)));
+    }
+
+    /** What is stored about a statement: its text and type. Either may be null. */
+    public record SqlInfo(String sqlId, String sqlOpname, String sqlText) {
     }
 
     @GetMapping("/{id}/sql/{sqlId}")
-    public Map<String, String> sqlText(@PathVariable long id, @PathVariable String sqlId) {
+    public SqlInfo sqlInfo(@PathVariable long id, @PathVariable String sqlId) {
         require(id);
-        String text = activity.sqlText(id, sqlId);
-        if (text == null) {
-            throw ApiException.notFound("No text stored for this statement");
+        return new SqlInfo(sqlId, activity.sqlOpname(id, sqlId), activity.sqlText(id, sqlId));
+    }
+
+    /** Plans and statistics, read from the monitored database at this moment. */
+    @GetMapping("/{id}/sql/{sqlId}/live")
+    public SqlLiveDetail sqlLive(@PathVariable long id, @PathVariable String sqlId) {
+        Target target = require(id);
+        if (!sqlId.matches("[A-Za-z0-9]{1,40}")) {
+            throw ApiException.badRequest("Not a statement id");
         }
-        return Map.of("sqlId", sqlId, "sqlText", text);
+        try (Connection connection = connections.open(target.dbType(), target.jdbcUrl(), target.username(),
+                cipher.decrypt(target.passwordEnc()))) {
+            return connections.sourceFor(target.dbType()).fetchSqlDetail(connection, sqlId);
+        } catch (Exception e) {
+            return new SqlLiveDetail(List.of(), List.of(),
+                    List.of("The database could not be reached: " + CollectorManager.describe(e)));
+        }
     }
 
     private void validate(TargetInput body, Long id) {

@@ -70,6 +70,40 @@ export interface TopResult {
   rows: TopRow[]
 }
 
+export interface SqlInfo {
+  sqlId: string
+  sqlOpname: string | null
+  sqlText: string | null
+}
+
+export interface SqlStat {
+  name: string
+  unit: 'count' | 'micros' | 'millis' | 'text'
+  number: number | null
+  text: string | null
+}
+
+export interface SqlPlanRow {
+  id: number
+  parentId: number | null
+  depth: number
+  operation: string
+  object: string | null
+  rows: number | null
+  bytes: number | null
+  cost: number | null
+  timeSeconds: number | null
+  accessPredicates: string | null
+  filterPredicates: string | null
+}
+
+/** Plans and statistics read from the monitored database on demand. */
+export interface SqlLiveDetail {
+  plans: { planHashValue: string; childNumber: number; rows: SqlPlanRow[] }[]
+  stats: { label: string; executions: number | null; stats: SqlStat[] }[]
+  notes: string[]
+}
+
 export interface User {
   id: number
   username: string

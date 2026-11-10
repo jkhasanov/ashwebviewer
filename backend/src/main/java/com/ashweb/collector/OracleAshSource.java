@@ -169,6 +169,107 @@ public class OracleAshSource implements AshSource {
         return texts;
     }
 
+    @Override
+    public SqlLiveDetail fetchSqlDetail(Connection connection, String sqlId) {
+        List<String> notes = new ArrayList<>();
+        List<SqlLiveDetail.StatGroup> stats = new ArrayList<>();
+        List<SqlLiveDetail.Plan> plans = new ArrayList<>();
+
+        try (PreparedStatement ps = connection.prepareStatement("""
+                SELECT plan_hash_value, executions, elapsed_time, cpu_time, user_io_wait_time,
+                       concurrency_wait_time, application_wait_time, buffer_gets, disk_reads, direct_writes,
+                       rows_processed, fetches, parse_calls, sorts, loads, invalidations, version_count
+                  FROM v$sqlstats WHERE sql_id = ? ORDER BY elapsed_time DESC""")) {
+            ps.setQueryTimeout(queryTimeoutSeconds);
+            ps.setString(1, sqlId);
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    List<SqlLiveDetail.Stat> s = new ArrayList<>();
+                    s.add(SqlLiveDetail.Stat.count("Executions", rs.getDouble(2)));
+                    s.add(SqlLiveDetail.Stat.micros("Elapsed time", rs.getDouble(3)));
+                    s.add(SqlLiveDetail.Stat.micros("CPU time", rs.getDouble(4)));
+                    s.add(SqlLiveDetail.Stat.micros("User I/O wait time", rs.getDouble(5)));
+                    s.add(SqlLiveDetail.Stat.micros("Concurrency wait time", rs.getDouble(6)));
+                    s.add(SqlLiveDetail.Stat.micros("Application wait time", rs.getDouble(7)));
+                    s.add(SqlLiveDetail.Stat.count("Buffer gets", rs.getDouble(8)));
+                    s.add(SqlLiveDetail.Stat.count("Disk reads", rs.getDouble(9)));
+                    s.add(SqlLiveDetail.Stat.count("Direct writes", rs.getDouble(10)));
+                    s.add(SqlLiveDetail.Stat.count("Rows processed", rs.getDouble(11)));
+                    s.add(SqlLiveDetail.Stat.count("Fetches", rs.getDouble(12)));
+                    s.add(SqlLiveDetail.Stat.count("Parse calls", rs.getDouble(13)));
+                    s.add(SqlLiveDetail.Stat.count("Sorts", rs.getDouble(14)));
+                    s.add(SqlLiveDetail.Stat.count("Loads", rs.getDouble(15)));
+                    s.add(SqlLiveDetail.Stat.count("Invalidations", rs.getDouble(16)));
+                    s.add(SqlLiveDetail.Stat.count("Child cursors", rs.getDouble(17)));
+                    // Some of these counters overflow inside Oracle and come back negative; leave those out
+                    s.removeIf(stat -> stat.number() != null && stat.number() < 0);
+                    stats.add(new SqlLiveDetail.StatGroup("Plan " + rs.getBigDecimal(1).toPlainString(),
+                            rs.getLong(2), s));
+                }
+            }
+            if (stats.isEmpty()) {
+                notes.add("The database no longer has statistics for this statement (it aged out of the shared pool).");
+            }
+        } catch (SQLException e) {
+            notes.add("Statistics could not be read (the account needs SELECT on v_$sqlstats): " + firstLine(e));
+        }
+
+        try (PreparedStatement ps = connection.prepareStatement("""
+                SELECT plan_hash_value, child_number, id, parent_id, depth, operation, options, object_owner,
+                       object_name, cardinality, bytes, cost, time, access_predicates, filter_predicates
+                  FROM v$sql_plan WHERE sql_id = ? ORDER BY plan_hash_value, child_number, id""")) {
+            ps.setQueryTimeout(queryTimeoutSeconds);
+            ps.setString(1, sqlId);
+            try (ResultSet rs = ps.executeQuery()) {
+                String currentPlan = null;
+                long keptChild = -1;
+                List<SqlLiveDetail.PlanRow> rows = null;
+                while (rs.next()) {
+                    String planHash = rs.getBigDecimal(1).toPlainString();
+                    long child = rs.getLong(2);
+                    if (!planHash.equals(currentPlan)) {
+                        currentPlan = planHash;
+                        keptChild = child;
+                        rows = new ArrayList<>();
+                        plans.add(new SqlLiveDetail.Plan(planHash, child, rows));
+                    } else if (child != keptChild) {
+                        // Child cursors sharing a plan hash have the same plan; show it once
+                        continue;
+                    }
+                    String options = rs.getString(7);
+                    String owner = rs.getString(8);
+                    String object = rs.getString(9);
+                    rows.add(new SqlLiveDetail.PlanRow(rs.getInt(3), nullableInt(rs, 4), rs.getInt(5),
+                            options == null ? rs.getString(6) : rs.getString(6) + " " + options,
+                            object == null ? null : owner == null ? object : owner + "." + object,
+                            nullableLong(rs, 10), nullableLong(rs, 11), nullableLong(rs, 12), nullableLong(rs, 13),
+                            rs.getString(14), rs.getString(15)));
+                }
+            }
+            if (plans.isEmpty()) {
+                notes.add("The database no longer has an execution plan for this statement in memory.");
+            }
+        } catch (SQLException e) {
+            notes.add("Execution plans could not be read (the account needs SELECT on v_$sql_plan): " + firstLine(e));
+        }
+        return new SqlLiveDetail(plans, stats, notes);
+    }
+
+    private static Integer nullableInt(ResultSet rs, int column) throws SQLException {
+        int value = rs.getInt(column);
+        return rs.wasNull() ? null : value;
+    }
+
+    private static Long nullableLong(ResultSet rs, int column) throws SQLException {
+        java.math.BigDecimal value = rs.getBigDecimal(column);
+        return value == null ? null : value.longValue();
+    }
+
+    private static String firstLine(SQLException e) {
+        String message = e.getMessage();
+        return message == null ? e.getClass().getSimpleName() : message.strip().lines().findFirst().orElse("");
+    }
+
     private void refreshUserNames(Connection connection) {
         if (Duration.between(userNamesLoadedAt, Instant.now()).compareTo(USER_CACHE_TTL) < 0) {
             return;

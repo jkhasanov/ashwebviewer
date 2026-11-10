@@ -83,7 +83,7 @@ public class ActivityService {
     /**
      * Average active sessions over time, stacked by wait class, or by wait event within one wait class.
      */
-    public TimeSeries timeSeries(long targetId, Instant from, Instant to, String waitClass) {
+    public TimeSeries timeSeries(long targetId, Instant from, Instant to, String waitClass, String sqlId) {
         Instant liveEdge = Instant.now().minus(LIVE_LAG);
         if (to.isAfter(liveEdge)) {
             to = liveEdge;
@@ -118,6 +118,10 @@ public class ActivityService {
         if (byEvent) {
             filter = " and wait_class = :waitClass";
             params.addValue("waitClass", waitClass);
+        }
+        if (sqlId != null && !sqlId.isBlank()) {
+            filter += " and sql_id = :sqlId";
+            params.addValue("sqlId", sqlId);
         }
         String sql = """
                 select date_bin(make_interval(secs => :bucket), %2$s, timestamptz '1970-01-01 00:00:00+00') as t,
@@ -158,7 +162,8 @@ public class ActivityService {
     public enum Dimension { SQL, SESSION }
 
     /** The statements or sessions responsible for most of the activity in a period. */
-    public TopResult top(long targetId, Instant from, Instant to, Dimension dimension, String waitClass, int limit) {
+    public TopResult top(long targetId, Instant from, Instant to, Dimension dimension, String waitClass,
+                         String sqlId, int limit) {
         Source source = sourceFor(from, to);
         if (!source.raw()) {
             // The rollup has one-minute resolution
@@ -173,6 +178,10 @@ public class ActivityService {
         if (waitClass != null && !waitClass.isBlank()) {
             filter = " and wait_class = :waitClass";
             params.addValue("waitClass", waitClass);
+        }
+        if (sqlId != null && !sqlId.isBlank()) {
+            filter += " and sql_id = :sqlId";
+            params.addValue("sqlId", sqlId);
         }
         String keys = dimension == Dimension.SQL ? "sql_id" : "session_id, session_serial";
         String attributes = dimension == Dimension.SQL
@@ -202,9 +211,9 @@ public class ActivityService {
             total[0] += count;
             Acc acc;
             if (dimension == Dimension.SQL) {
-                String sqlId = rs.getString("sql_id");
-                acc = accs.computeIfAbsent(sqlId, k -> new Acc());
-                acc.sqlId = sqlId;
+                String rowSqlId = rs.getString("sql_id");
+                acc = accs.computeIfAbsent(rowSqlId, k -> new Acc());
+                acc.sqlId = rowSqlId;
                 if (rs.getString("sql_opname") != null) {
                     acc.sqlOpname = rs.getString("sql_opname");
                 }
@@ -252,6 +261,16 @@ public class ActivityService {
                     texts.put(rs.getString("sql_id"), rs.getString("t"));
                 });
         return texts;
+    }
+
+    /** Statement type (SELECT, UPDATE...) as last seen in the samples, or null. */
+    public String sqlOpname(long targetId, String sqlId) {
+        List<String> found = jdbc.queryForList("""
+                select sql_opname from ash_rollup_1m
+                 where target_id = :target and sql_id = :id and sql_opname is not null
+                 order by bucket desc limit 1""",
+                new MapSqlParameterSource().addValue("target", targetId).addValue("id", sqlId), String.class);
+        return found.isEmpty() ? null : found.get(0);
     }
 
     public String sqlText(long targetId, String sqlId) {

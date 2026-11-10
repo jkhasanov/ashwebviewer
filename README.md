@@ -14,9 +14,12 @@ once. It is a web re-implementation of the ideas in the desktop tool
   refreshing) or history (8 h, 12 h, 1 day, 1 week, 1 month, custom range).
 - Drag across the chart to rank the top SQL and top sessions of that period.
 - Filter to one wait class to see it broken down by wait event.
+- SQL detail: click a SQL ID for its full text, its activity over time, the sessions that ran it, and
+  (Oracle) its execution plans and cumulative statistics read live from the database.
+- Ten visual styles, switchable from the top bar.
 - Admins add, edit, test, start, stop and delete databases, and manage users. Viewers are read-only.
 
-Not yet built: SQL detail (plans, statistics), session detail, raw sample grid, Oracle ASH report,
+Not yet built: session detail, raw sample grid, Oracle ASH report,
 10046 tracing, Oracle Standard Edition, Oracle RAC (`gv$`).
 
 ## How it is put together
@@ -56,7 +59,7 @@ cd backend
 mvn test-compile exec:java -Dexec.mainClass=com.ashweb.DevServer -Dexec.classpathScope=test
 ```
 
-This starts a throwaway PostgreSQL, the application on http://localhost:8080 and some demo load.
+This starts a local PostgreSQL (data kept in `backend/target/dev`), the application on http://localhost:8080 and some demo load.
 Sign in with `admin` / `admin12345`. For front-end work also run `npm run dev` in `frontend/` and open
 http://localhost:5173 (API calls are proxied to port 8080).
 
@@ -92,6 +95,7 @@ create user ashweb identified by "...";
 grant create session to ashweb;
 grant select on v_$active_session_history to ashweb;
 grant select on v_$sqlstats to ashweb;
+grant select on v_$sql_plan to ashweb;   -- for execution plans on the SQL detail page
 ```
 
 PostgreSQL:

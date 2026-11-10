@@ -174,3 +174,16 @@ main { padding: 16px 20px 40px; max-width: 1600px; margin: 0 auto; display: flex
   .topbar { padding: 8px 16px; gap: 10px; position: static; }
   .filter-select { margin-left: 0; }
 }
+
+/* Statement detail */
+.sql-id-title { font-size: 1.2rem; font-weight: 500; }
+.sql-inline { max-height: 260px; }
+.tabs { display: flex; gap: 4px; padding: 0 14px; border-bottom: var(--border-width) solid var(--border); flex-wrap: wrap; }
+.tabs button { border: none; border-radius: 0; background: none; border-bottom: 2px solid transparent; padding: 6px 10px; color: var(--text-secondary); }
+.tabs button.active { color: var(--text-primary); border-bottom-color: var(--accent); font-weight: 600; }
+.plan-caption { padding: 0 14px 6px; }
+.plan-table td { vertical-align: top; }
+.plan-op { white-space: pre; }
+.plan-predicates { color: var(--text-primary); max-width: 520px; overflow-wrap: anywhere; font-size: 0.86rem; }
+.note { padding-top: 6px; padding-bottom: 10px; }
+.stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 380px), 1fr)); gap: 0 14px; }
