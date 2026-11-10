@@ -7,6 +7,7 @@ import { Modal } from './components/Modal'
 import { DatabasesPage } from './pages/DatabasesPage'
 import { LoginPage } from './pages/LoginPage'
 import { OverviewPage } from './pages/OverviewPage'
+import { SessionPage } from './pages/SessionPage'
 import { SqlPage } from './pages/SqlPage'
 import { TargetPage } from './pages/TargetPage'
 import { UsersPage } from './pages/UsersPage'
@@ -100,6 +101,7 @@ export function App() {
           <Route path="/" element={<OverviewPage isAdmin={isAdmin} />} />
           <Route path="/db/:id" element={<TargetPage />} />
           <Route path="/db/:id/sql/:sqlId" element={<SqlPage />} />
+          <Route path="/db/:id/session/:sessionId/:sessionSerial" element={<SessionPage />} />
           {isAdmin && <Route path="/databases" element={<DatabasesPage />} />}
           {isAdmin && <Route path="/users" element={<UsersPage me={user} />} />}
           <Route path="*" element={<Navigate to="/" replace />} />

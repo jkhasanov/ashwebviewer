@@ -229,7 +229,9 @@ export function SqlPage() {
         {selection && <button onClick={clearSelection}>Clear selection</button>}
       </div>
       <TopTable kind="SESSION" title="Sessions that ran it" result={sessions.data} loading={sessions.isPending}
-                error={sessions.error?.message ?? null} showSerial={target.data?.dbType === 'ORACLE'} />
+                error={sessions.error?.message ?? null}
+                sessionLink={(sid, serial) => `/db/${id}/session/${sid}/${serial}?from=${range[0]}&to=${range[1]}`}
+                showSerial={target.data?.dbType === 'ORACLE'} />
 
       <section className="panel">
         <div className="panel-head">

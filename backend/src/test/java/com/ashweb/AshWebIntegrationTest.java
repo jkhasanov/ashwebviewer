@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.ashweb.activity.ActivityService;
 import com.ashweb.activity.ActivityService.Dimension;
+import com.ashweb.activity.ActivityService.Filter;
 import com.ashweb.collector.CollectorManager;
 import com.ashweb.storage.PartitionManager;
 import io.zonky.test.db.postgres.embedded.EmbeddedPostgres;
@@ -178,13 +179,13 @@ class AshWebIntegrationTest {
         assertThat(sql.body()).contains("ashweb-it").contains("\"sqlOpname\":\"SELECT\"");
 
         // pg_sleep shows up as about one active session waiting on Timeout/PgSleep for about eight seconds
-        var top = activity.top(targetId, from, to, Dimension.SESSION, "Timeout", null, 10);
+        var top = activity.top(targetId, from, to, Dimension.SESSION, Filter.waitClass("Timeout"), 10);
         assertThat(top.rows()).isNotEmpty();
         assertThat(top.rows().get(0).samples()).isBetween(5L, 10L);
 
         // Charts deliberately stop ten seconds short of "now", so wait until the busy period is behind that edge
         Thread.sleep(15_000);
-        var series = activity.timeSeries(targetId, Instant.now().minus(Duration.ofMinutes(10)), Instant.now(), null, null);
+        var series = activity.timeSeries(targetId, Instant.now().minus(Duration.ofMinutes(10)), Instant.now(), Filter.NONE);
         assertThat(series.bucketSeconds()).isEqualTo(5);
         assertThat(series.series()).extracting(ActivityService.Series::name).contains("Timeout");
         double timeoutSeconds = series.series().stream().filter(s -> s.name().equals("Timeout"))
@@ -192,7 +193,7 @@ class AshWebIntegrationTest {
         assertThat(timeoutSeconds).isBetween(4.0, 10.5);
 
         var events = activity.timeSeries(targetId, Instant.now().minus(Duration.ofMinutes(10)), Instant.now(),
-                "Timeout", null);
+                Filter.waitClass("Timeout"));
         assertThat(events.series()).extracting(ActivityService.Series::name).contains("PgSleep");
 
         // The same answer must come from the per-minute rollup (used for long ranges)
@@ -204,19 +205,19 @@ class AshWebIntegrationTest {
                 Long.class, targetId);
         assertThat(rolled).isEqualTo(raw);
         var longRange = activity.top(targetId, Instant.now().minus(Duration.ofHours(12)), Instant.now(),
-                Dimension.SESSION, "Timeout", null, 10);
+                Dimension.SESSION, Filter.waitClass("Timeout"), 10);
         assertThat(longRange.totalSamples()).isEqualTo(raw);
 
         // SQL detail: activity and sessions narrowed to one statement, plus what the database itself reports
         Matcher sqlIdMatch = Pattern.compile("\\{\"sqlId\":\"([0-9a-f]+)\"[^{}]*ashweb-it").matcher(sql.body());
         assertThat(sqlIdMatch.find()).isTrue();
         String sqlId = sqlIdMatch.group(1);
-        var forSql = activity.top(targetId, from, to, Dimension.SESSION, null, sqlId, 10);
+        var forSql = activity.top(targetId, from, to, Dimension.SESSION, Filter.sql(sqlId), 10);
         assertThat(forSql.rows()).hasSize(1);
         assertThat(forSql.rows().get(0).program()).isEqualTo("it-load");
-        assertThat(activity.top(targetId, from, to, Dimension.SESSION, null, "nosuchsql", 10).rows()).isEmpty();
+        assertThat(activity.top(targetId, from, to, Dimension.SESSION, Filter.sql("nosuchsql"), 10).rows()).isEmpty();
         var sqlSeries = activity.timeSeries(targetId, Instant.now().minus(Duration.ofMinutes(10)), Instant.now(),
-                null, sqlId);
+                Filter.sql(sqlId));
         assertThat(sqlSeries.series()).extracting(ActivityService.Series::name).containsExactly("Timeout");
         HttpResponse<String> info = send(admin, adminCookies, "GET", "/api/targets/" + targetId + "/sql/" + sqlId,
                 null);
@@ -225,6 +226,27 @@ class AshWebIntegrationTest {
                 "/api/targets/" + targetId + "/sql/" + sqlId + "/live", null);
         assertThat(live.statusCode()).as(live.body()).isEqualTo(200);
         assertThat(live.body()).contains("\"plans\":[]").contains("does not keep execution plans");
+
+        // Session detail: the session that ran the load, its statements, and what is known about it
+        long sid = forSql.rows().get(0).sessionId();
+        long serial = forSql.rows().get(0).sessionSerial();
+        var sessionSql = activity.top(targetId, from, to, Dimension.SQL, Filter.session(sid, serial), 10);
+        assertThat(sessionSql.rows()).extracting(ActivityService.TopRow::sqlId).contains(sqlId);
+        assertThat(sessionSql.totalSamples()).isEqualTo(forSql.totalSamples());
+        assertThat(activity.top(targetId, from, to, Dimension.SQL, Filter.session(sid, serial + 1), 10).rows())
+                .isEmpty();
+        HttpResponse<String> sessionSeries = send(admin, adminCookies, "GET", "/api/targets/" + targetId
+                + "/activity?from=" + Instant.now().minus(Duration.ofMinutes(10)) + "&to=" + Instant.now()
+                + "&sessionId=" + sid + "&sessionSerial=" + serial, null);
+        assertThat(sessionSeries.statusCode()).as(sessionSeries.body()).isEqualTo(200);
+        assertThat(sessionSeries.body()).contains("\"name\":\"Timeout\"");
+        HttpResponse<String> sessionInfo = send(admin, adminCookies, "GET",
+                "/api/targets/" + targetId + "/session/" + sid + "/" + serial, null);
+        assertThat(sessionInfo.statusCode()).as(sessionInfo.body()).isEqualTo(200);
+        assertThat(sessionInfo.body()).contains("\"program\":\"it-load\"").contains("\"backendType\"")
+                .contains("\"samples\":" + forSql.totalSamples());
+        assertThat(send(admin, adminCookies, "GET", "/api/targets/" + targetId + "/session/" + sid + "/1", null)
+                .statusCode()).isEqualTo(404);
 
         HttpResponse<String> overview = send(admin, adminCookies, "GET", "/api/targets", null);
         assertThat(overview.body()).contains("\"state\":\"RUNNING\"");

@@ -181,6 +181,9 @@ main { padding: 16px 20px 40px; max-width: 1600px; margin: 0 auto; display: flex
 .tabs { display: flex; gap: 4px; padding: 0 14px; border-bottom: var(--border-width) solid var(--border); flex-wrap: wrap; }
 .tabs button { border: none; border-radius: 0; background: none; border-bottom: 2px solid transparent; padding: 6px 10px; color: var(--text-secondary); }
 .tabs button.active { color: var(--text-primary); border-bottom-color: var(--accent); font-weight: 600; }
+.facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); gap: 12px 20px; margin: 0; padding: 4px 14px 14px; }
+.facts dt { font-size: 0.8rem; color: var(--text-secondary); }
+.facts dd { margin: 2px 0 0; overflow-wrap: anywhere; }
 .plan-caption { padding: 0 14px 6px; }
 .plan-table td { vertical-align: top; }
 .plan-op { white-space: pre; }

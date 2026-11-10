@@ -16,10 +16,12 @@ once. It is a web re-implementation of the ideas in the desktop tool
 - Filter to one wait class to see it broken down by wait event.
 - SQL detail: click a SQL ID for its full text, its activity over time, the sessions that ran it, and
   (Oracle) its execution plans and cumulative statistics read live from the database.
+- Session detail: click a session for who it was (user, program, machine, module or client), its activity
+  over time and the statements it ran.
 - Ten visual styles, switchable from the top bar.
 - Admins add, edit, test, start, stop and delete databases, and manage users. Viewers are read-only.
 
-Not yet built: session detail, raw sample grid, Oracle ASH report,
+Not yet built: raw sample grid, Oracle ASH report,
 10046 tracing, Oracle Standard Edition, Oracle RAC (`gv$`).
 
 ## How it is put together
@@ -107,7 +109,7 @@ grant pg_read_all_stats to ashweb;
 
 For PostgreSQL 14+, setting `compute_query_id = on` groups statements that differ only in literal values.
 
-## Licence note
+## Licence
 
-The original ASH-Viewer is GPLv3. This project is new code; it reuses the approach and the queries
-against the database activity views. If you distribute it, check whether that makes GPLv3 apply to you.
+GNU General Public License v3.0, the same licence as the original ASH-Viewer, whose approach and queries
+against the database activity views this project reuses. See [LICENSE](LICENSE).

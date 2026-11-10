@@ -76,6 +76,18 @@ export interface SqlInfo {
   sqlText: string | null
 }
 
+export interface SessionInfo {
+  sessionId: number
+  sessionSerial: number
+  userName: string | null
+  program: string | null
+  firstSeen: string
+  lastSeen: string
+  samples: number
+  /** Source specific details of the newest stored sample (machine, module, client...). */
+  attributes: Record<string, string>
+}
+
 export interface SqlStat {
   name: string
   unit: 'count' | 'micros' | 'millis' | 'text'

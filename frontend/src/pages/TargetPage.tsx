@@ -163,6 +163,11 @@ export function TargetPage() {
     const to = data ? new Date(data.to).getTime() : Date.now()
     return `/db/${id}/sql/${encodeURIComponent(sqlId)}?from=${from}&to=${to}`
   }
+  const sessionLink = (sessionId: number, sessionSerial: number) => {
+    const from = data ? new Date(data.from).getTime() : Date.now() - HOUR
+    const to = data ? new Date(data.to).getTime() : Date.now()
+    return `/db/${id}/session/${sessionId}/${sessionSerial}?from=${from}&to=${to}`
+  }
 
   return (
     <>
@@ -258,7 +263,7 @@ export function TargetPage() {
         <TopTable kind="SQL" result={topSql.data} loading={topSql.isPending} error={topSql.error?.message ?? null}
                   sqlLink={sqlLink} />
         <TopTable kind="SESSION" result={topSessions.data} loading={topSessions.isPending}
-                  error={topSessions.error?.message ?? null} showSerial={t?.dbType === 'ORACLE'} />
+                  error={topSessions.error?.message ?? null} sessionLink={sessionLink} showSerial={t?.dbType === 'ORACLE'} />
       </div>
 
     </>

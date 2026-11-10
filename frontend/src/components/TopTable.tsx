@@ -27,6 +27,8 @@ interface Props {
   error: string | null
   /** Where a SQL ID leads (the statement's detail page). Without it SQL IDs are plain text. */
   sqlLink?: (sqlId: string) => string
+  /** Where a session leads (its detail page). Without it sessions are plain text. */
+  sessionLink?: (sessionId: number, sessionSerial: number) => string
   title?: string
   /**
    * Show the serial number next to the session id (Oracle, where "sid,serial#" names a session and one sid
@@ -36,9 +38,12 @@ interface Props {
 }
 
 /** Statements or sessions ranked by their share of the activity in the selected period. */
-export function TopTable({ kind, result, loading, error, sqlLink, title, showSerial }: Props) {
+export function TopTable({ kind, result, loading, error, sqlLink, sessionLink, title, showSerial }: Props) {
   const rows = result?.rows ?? []
   const maxSamples = rows.length ? rows[0].samples : 1
+  const sessionLabel = (row: TopRow) => (
+    <>{row.sessionId}{showSerial && <span className="muted">,{row.sessionSerial}</span>}</>
+  )
   return (
     <section className="panel top-panel">
       <h3>{title ?? (kind === 'SQL' ? 'Top SQL' : 'Top sessions')}</h3>
@@ -89,7 +94,9 @@ export function TopTable({ kind, result, loading, error, sqlLink, title, showSer
                     <td><ActivityBar row={row} maxSamples={maxSamples} /></td>
                     <td className="num">{formatAas(row.avgActiveSessions)}</td>
                     <td className="mono" title={showSerial ? 'Session id, serial number' : undefined}>
-                      {row.sessionId}{showSerial && <span className="muted">,{row.sessionSerial}</span>}
+                      {sessionLink
+                        ? <Link to={sessionLink(row.sessionId!, row.sessionSerial!)}>{sessionLabel(row)}</Link>
+                        : sessionLabel(row)}
                     </td>
                     <td>{row.userName ?? ''}</td>
                     <td className="ellipsis" title={row.program ?? undefined}>{row.program ?? ''}</td>

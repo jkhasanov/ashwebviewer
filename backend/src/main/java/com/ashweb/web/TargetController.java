@@ -2,7 +2,9 @@ package com.ashweb.web;
 
 import com.ashweb.activity.ActivityService;
 import com.ashweb.activity.ActivityService.Dimension;
+import com.ashweb.activity.ActivityService.Filter;
 import com.ashweb.activity.ActivityService.OverviewRow;
+import com.ashweb.activity.ActivityService.SessionInfo;
 import com.ashweb.activity.ActivityService.TimeSeries;
 import com.ashweb.activity.ActivityService.TopResult;
 import com.ashweb.collector.CollectorManager;
@@ -178,20 +180,37 @@ public class TargetController {
     @GetMapping("/{id}/activity")
     public TimeSeries activity(@PathVariable long id, @RequestParam Instant from, @RequestParam Instant to,
                                @RequestParam(required = false) String waitClass,
-                               @RequestParam(required = false) String sqlId) {
+                               @RequestParam(required = false) String sqlId,
+                               @RequestParam(required = false) Long sessionId,
+                               @RequestParam(required = false) Long sessionSerial) {
         require(id);
         checkRange(from, to);
-        return activity.timeSeries(id, from, to, waitClass, sqlId);
+        return activity.timeSeries(id, from, to, new Filter(waitClass, sqlId, sessionId, sessionSerial));
     }
 
     @GetMapping("/{id}/top")
     public TopResult top(@PathVariable long id, @RequestParam Instant from, @RequestParam Instant to,
                          @RequestParam Dimension dimension, @RequestParam(required = false) String waitClass,
                          @RequestParam(required = false) String sqlId,
+                         @RequestParam(required = false) Long sessionId,
+                         @RequestParam(required = false) Long sessionSerial,
                          @RequestParam(defaultValue = "30") int limit) {
         require(id);
         checkRange(from, to);
-        return activity.top(id, from, to, dimension, waitClass, sqlId, Math.max(1, Math.min(limit, 200)));
+        return activity.top(id, from, to, dimension, new Filter(waitClass, sqlId, sessionId, sessionSerial),
+                Math.max(1, Math.min(limit, 200)));
+    }
+
+    /** What is stored about one session: who it was and when it was active. */
+    @GetMapping("/{id}/session/{sessionId}/{sessionSerial}")
+    public SessionInfo sessionInfo(@PathVariable long id, @PathVariable long sessionId,
+                                   @PathVariable long sessionSerial) {
+        require(id);
+        SessionInfo info = activity.sessionInfo(id, sessionId, sessionSerial);
+        if (info == null) {
+            throw ApiException.notFound("Nothing is stored about this session");
+        }
+        return info;
     }
 
     /** What is stored about a statement: its text and type. Either may be null. */

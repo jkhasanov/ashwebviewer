@@ -53,6 +53,54 @@ public class ActivityService {
                               double[] spark) {
     }
 
+    public record SessionInfo(long sessionId, long sessionSerial, String userName, String program,
+                              Instant firstSeen, Instant lastSeen, long samples, Map<String, String> attributes) {
+    }
+
+    /** Narrows a question to one wait class, statement or session. Null members do not narrow. */
+    public record Filter(String waitClass, String sqlId, Long sessionId, Long sessionSerial) {
+
+        public static final Filter NONE = new Filter(null, null, null, null);
+
+        public static Filter waitClass(String waitClass) {
+            return new Filter(waitClass, null, null, null);
+        }
+
+        public static Filter sql(String sqlId) {
+            return new Filter(null, sqlId, null, null);
+        }
+
+        public static Filter session(long sessionId, long sessionSerial) {
+            return new Filter(null, null, sessionId, sessionSerial);
+        }
+
+        boolean hasWaitClass() {
+            return waitClass != null && !waitClass.isBlank();
+        }
+
+        /** The conditions to append to a where clause; their values are added to params. */
+        String conditions(MapSqlParameterSource params) {
+            StringBuilder sql = new StringBuilder();
+            if (hasWaitClass()) {
+                sql.append(" and wait_class = :waitClass");
+                params.addValue("waitClass", waitClass);
+            }
+            if (sqlId != null && !sqlId.isBlank()) {
+                sql.append(" and sql_id = :sqlId");
+                params.addValue("sqlId", sqlId);
+            }
+            if (sessionId != null) {
+                sql.append(" and session_id = :sessionId");
+                params.addValue("sessionId", sessionId);
+            }
+            if (sessionSerial != null) {
+                sql.append(" and session_serial = :sessionSerial");
+                params.addValue("sessionSerial", sessionSerial);
+            }
+            return sql.toString();
+        }
+    }
+
     private final NamedParameterJdbcTemplate jdbc;
     private final PartitionManager partitions;
 
@@ -83,7 +131,7 @@ public class ActivityService {
     /**
      * Average active sessions over time, stacked by wait class, or by wait event within one wait class.
      */
-    public TimeSeries timeSeries(long targetId, Instant from, Instant to, String waitClass, String sqlId) {
+    public TimeSeries timeSeries(long targetId, Instant from, Instant to, Filter filter) {
         Instant liveEdge = Instant.now().minus(LIVE_LAG);
         if (to.isAfter(liveEdge)) {
             to = liveEdge;
@@ -107,29 +155,21 @@ public class ActivityService {
         to = floor(to, bucket);
         int points = (int) Math.max(0, Duration.between(from, to).getSeconds() / bucket);
 
-        boolean byEvent = waitClass != null && !waitClass.isBlank();
+        boolean byEvent = filter.hasWaitClass();
         String groupColumn = byEvent ? "event" : "wait_class";
         MapSqlParameterSource params = new MapSqlParameterSource()
                 .addValue("target", targetId)
                 .addValue("from", utc(from))
                 .addValue("to", utc(to))
                 .addValue("bucket", (double) bucket);
-        String filter = "";
-        if (byEvent) {
-            filter = " and wait_class = :waitClass";
-            params.addValue("waitClass", waitClass);
-        }
-        if (sqlId != null && !sqlId.isBlank()) {
-            filter += " and sql_id = :sqlId";
-            params.addValue("sqlId", sqlId);
-        }
+        String conditions = filter.conditions(params);
         String sql = """
                 select date_bin(make_interval(secs => :bucket), %2$s, timestamptz '1970-01-01 00:00:00+00') as t,
                        %3$s as k, %4$s as c
                   from %1$s
                  where target_id = :target and %2$s >= :from and %2$s < :to%5$s
                  group by 1, 2""".formatted(source.table(), source.timeColumn(), groupColumn, source.countExpr(),
-                filter);
+                conditions);
 
         Map<String, double[]> byName = new HashMap<>();
         Map<String, Double> totals = new HashMap<>();
@@ -162,8 +202,7 @@ public class ActivityService {
     public enum Dimension { SQL, SESSION }
 
     /** The statements or sessions responsible for most of the activity in a period. */
-    public TopResult top(long targetId, Instant from, Instant to, Dimension dimension, String waitClass,
-                         String sqlId, int limit) {
+    public TopResult top(long targetId, Instant from, Instant to, Dimension dimension, Filter filter, int limit) {
         Source source = sourceFor(from, to);
         if (!source.raw()) {
             // The rollup has one-minute resolution
@@ -174,15 +213,7 @@ public class ActivityService {
                 .addValue("target", targetId)
                 .addValue("from", utc(from))
                 .addValue("to", utc(to));
-        String filter = "";
-        if (waitClass != null && !waitClass.isBlank()) {
-            filter = " and wait_class = :waitClass";
-            params.addValue("waitClass", waitClass);
-        }
-        if (sqlId != null && !sqlId.isBlank()) {
-            filter += " and sql_id = :sqlId";
-            params.addValue("sqlId", sqlId);
-        }
+        String conditions = filter.conditions(params);
         String keys = dimension == Dimension.SQL ? "sql_id" : "session_id, session_serial";
         String attributes = dimension == Dimension.SQL
                 ? "max(sql_opname) as sql_opname"
@@ -192,7 +223,7 @@ public class ActivityService {
                   from %4$s
                  where target_id = :target and %5$s >= :from and %5$s < :to%6$s
                  group by %1$s, wait_class""".formatted(keys, attributes, source.countExpr(), source.table(),
-                source.timeColumn(), filter);
+                source.timeColumn(), conditions);
 
         final class Acc {
             String sqlId;
@@ -261,6 +292,47 @@ public class ActivityService {
                     texts.put(rs.getString("sql_id"), rs.getString("t"));
                 });
         return texts;
+    }
+
+    /**
+     * Who a session was and when it was active, or null when nothing is stored about it. The attributes
+     * (machine, module, client address...) are those of its newest sample that is still kept.
+     */
+    public SessionInfo sessionInfo(long targetId, long sessionId, long sessionSerial) {
+        MapSqlParameterSource params = new MapSqlParameterSource()
+                .addValue("target", targetId)
+                .addValue("sessionId", sessionId)
+                .addValue("sessionSerial", sessionSerial);
+        SessionInfo summary = jdbc.query("""
+                select max(user_name) as user_name, max(program) as program, min(bucket) as first_seen,
+                       max(bucket) as last_seen, sum(samples) as samples
+                  from ash_rollup_1m
+                 where target_id = :target and session_id = :sessionId and session_serial = :sessionSerial""",
+                params, rs -> {
+                    if (!rs.next() || rs.getObject("first_seen") == null) {
+                        return null;
+                    }
+                    return new SessionInfo(sessionId, sessionSerial, rs.getString("user_name"),
+                            rs.getString("program"), rs.getObject("first_seen", OffsetDateTime.class).toInstant(),
+                            rs.getObject("last_seen", OffsetDateTime.class).toInstant(), rs.getLong("samples"),
+                            new LinkedHashMap<>());
+                });
+        if (summary == null) {
+            return null;
+        }
+        // Only the last active minute is searched, so this stays quick however old the session is
+        params.addValue("from", utc(summary.lastSeen())).addValue("to", utc(summary.lastSeen().plusSeconds(60)));
+        jdbc.query("""
+                select a.key, a.value
+                  from (select extra from ash_sample
+                         where target_id = :target and sample_time >= :from and sample_time < :to
+                           and session_id = :sessionId and session_serial = :sessionSerial and extra is not null
+                         order by sample_time desc limit 1) s,
+                       jsonb_each_text(s.extra) a""",
+                params, rs -> {
+                    summary.attributes().put(rs.getString(1), rs.getString(2));
+                });
+        return summary;
     }
 
     /** Statement type (SELECT, UPDATE...) as last seen in the samples, or null. */
