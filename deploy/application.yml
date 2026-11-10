@@ -1,0 +1,33 @@
+# Copy to /opt/ashweb/config/application.yml and adjust. Only the settings you want to change are needed.
+
+server:
+  port: 8080
+  # Put the application behind HTTPS (for example an nginx reverse proxy) and then uncomment:
+  # forward-headers-strategy: native
+  # servlet:
+  #   session:
+  #     cookie:
+  #       secure: true
+
+spring:
+  datasource:
+    # Storage database: PostgreSQL 14 or newer
+    url: jdbc:postgresql://localhost:5432/ashweb?reWriteBatchedInserts=true
+    username: ashweb
+    password: change-me
+
+ashweb:
+  security:
+    # Key that encrypts the passwords of monitored databases. Created on first start. Back it up.
+    master-key-file: /opt/ashweb/data/master.key
+    # Password of the "admin" user created on first start. Leave empty to have a random one printed to the log.
+    initial-admin-password: ""
+  collector:
+    oracle-interval-ms: 5000
+    postgres-interval-ms: 1000
+    initial-load-minutes: 60
+  retention:
+    # Individual samples (short ranges, second-level detail)
+    raw-days: 7
+    # Per-minute totals (long ranges)
+    rollup-days: 90

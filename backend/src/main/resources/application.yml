@@ -1,0 +1,38 @@
+server:
+  port: 8080
+  servlet:
+    session:
+      timeout: 12h
+      cookie:
+        same-site: lax
+        http-only: true
+
+spring:
+  application:
+    name: ashweb
+  datasource:
+    # Storage database (PostgreSQL 14 or newer)
+    url: jdbc:postgresql://localhost:5432/ashweb?reWriteBatchedInserts=true
+    username: ashweb
+    password: ashweb
+    hikari:
+      maximum-pool-size: 20
+  threads:
+    virtual:
+      enabled: true
+
+ashweb:
+  security:
+    # AES key used to encrypt the passwords of monitored databases. Created on first start if missing.
+    master-key-file: ./data/master.key
+    # Password of the "admin" user created on first start. Random (printed to the log) if empty.
+    initial-admin-password: ""
+  collector:
+    oracle-interval-ms: 5000
+    postgres-interval-ms: 1000
+    # How far back to read v$active_session_history the first time a database is collected
+    initial-load-minutes: 60
+    query-timeout-seconds: 30
+  retention:
+    raw-days: 7
+    rollup-days: 90

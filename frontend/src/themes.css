@@ -1,0 +1,280 @@
+/*
+ * Visual styles. Each block only sets variables (plus a few targeted rules at the end);
+ * styles.css is written against these variables. The :root defaults are the "classic" style.
+ */
+:root {
+  color-scheme: light;
+  --bg: #f3f2ef;
+  --surface: #fcfcfb;
+  --panel-bg: var(--surface);
+  --panel-blur: none;
+  --text-primary: #0b0b0b;
+  --text-secondary: #52514e;
+  --border: #dddcd6;
+  --border-width: 1px;
+  --grid: #e6e5e0;
+  --accent: #1c5cab;
+  --accent-text: #ffffff;
+  --hover: #eeede9;
+  --good: #0a7d0a;
+  --critical: #c02f2f;
+  --critical-bg: #fbeaea;
+  --neutral-mark: #6f6e6a;
+  --radius: 8px;
+  --radius-sm: 6px;
+  --shadow: none;
+  --font: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font-heading: var(--font);
+  --font-mono: ui-monospace, 'Cascadia Mono', Consolas, monospace;
+  --font-size: 14px;
+  --heading-weight: 600;
+  --heading-transform: none;
+  --heading-spacing: normal;
+  --topbar-bg: var(--surface);
+  --topbar-text: var(--text-primary);
+  --topbar-muted: var(--text-secondary);
+  --topbar-hover: var(--hover);
+  --topbar-border: var(--border);
+  --cell-pad-y: 7px;
+}
+
+:root[data-theme='classic-dark'] {
+  color-scheme: dark;
+  --bg: #111110;
+  --surface: #1a1a19;
+  --text-primary: #f0efec;
+  --text-secondary: #c3c2b7;
+  --border: #383835;
+  --grid: #2b2b29;
+  --accent: #86b6ef;
+  --accent-text: #0b0b0b;
+  --hover: #262624;
+  --good: #3fc23f;
+  --critical: #f08080;
+  --critical-bg: #3a1c1c;
+  --neutral-mark: #a3a29b;
+}
+
+/* Cool grey, roomy, soft shadows: the familiar modern product look */
+:root[data-theme='slate'] {
+  --bg: #f1f5f9;
+  --surface: #ffffff;
+  --text-primary: #0f172a;
+  --text-secondary: #55627a;
+  --border: #e2e8f0;
+  --grid: #edf1f6;
+  --accent: #2563eb;
+  --hover: #f1f5f9;
+  --good: #15803d;
+  --critical: #dc2626;
+  --critical-bg: #fef2f2;
+  --neutral-mark: #64748b;
+  --radius: 14px;
+  --radius-sm: 9px;
+  --shadow: 0 1px 2px rgba(15, 23, 42, 0.05), 0 6px 20px rgba(15, 23, 42, 0.06);
+  --font: 'Segoe UI Variable Text', 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --heading-spacing: -0.01em;
+  --cell-pad-y: 10px;
+}
+
+/* Deep navy with a cyan accent */
+:root[data-theme='midnight'] {
+  color-scheme: dark;
+  --bg: #0b1220;
+  --surface: #121b2e;
+  --text-primary: #e6ecf7;
+  --text-secondary: #9fb0cc;
+  --border: #22304d;
+  --grid: #1a2640;
+  --accent: #38bdf8;
+  --accent-text: #04121f;
+  --hover: #19253e;
+  --good: #34d399;
+  --critical: #fb7185;
+  --critical-bg: #3b1524;
+  --neutral-mark: #8fa3c4;
+  --radius: 12px;
+  --radius-sm: 8px;
+  --shadow: 0 8px 28px rgba(0, 0, 0, 0.35);
+  --font: 'Segoe UI Variable Text', 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --topbar-bg: #0e1627;
+  --cell-pad-y: 9px;
+}
+
+/* Frosted translucent panels over a soft colour wash */
+:root[data-theme='glass'] {
+  --bg: linear-gradient(135deg, #dfe9ff 0%, #f3e8ff 45%, #ffe9f1 100%);
+  --surface: #ffffff;
+  --panel-bg: rgba(255, 255, 255, 0.62);
+  --panel-blur: blur(18px) saturate(1.4);
+  --text-primary: #1a1633;
+  --text-secondary: #55507a;
+  --border: rgba(255, 255, 255, 0.9);
+  --grid: rgba(60, 50, 120, 0.1);
+  --accent: #6d4aff;
+  --hover: rgba(109, 74, 255, 0.08);
+  --good: #0f7b47;
+  --critical: #cf2456;
+  --critical-bg: rgba(255, 228, 236, 0.85);
+  --neutral-mark: #6b6594;
+  --radius: 18px;
+  --radius-sm: 11px;
+  --shadow: 0 10px 34px rgba(80, 60, 160, 0.14);
+  --font: 'Segoe UI Variable Text', 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --topbar-bg: rgba(255, 255, 255, 0.55);
+  --topbar-border: rgba(255, 255, 255, 0.9);
+  --cell-pad-y: 10px;
+}
+
+/* Dark frosted panels over a teal-to-violet glow */
+:root[data-theme='aurora'] {
+  color-scheme: dark;
+  --bg: radial-gradient(1100px 600px at 12% -5%, #0f5d5a 0%, transparent 60%),
+    radial-gradient(1000px 700px at 95% 10%, #4b2a8c 0%, transparent 60%), #0a0d1a;
+  --surface: #171b2e;
+  --panel-bg: rgba(23, 27, 46, 0.62);
+  --panel-blur: blur(20px) saturate(1.3);
+  --text-primary: #eef0fb;
+  --text-secondary: #b0b6d6;
+  --border: rgba(255, 255, 255, 0.13);
+  --grid: rgba(255, 255, 255, 0.08);
+  --accent: #5eead4;
+  --accent-text: #04201c;
+  --hover: rgba(255, 255, 255, 0.07);
+  --good: #5eead4;
+  --critical: #ff8fa3;
+  --critical-bg: rgba(90, 20, 45, 0.6);
+  --neutral-mark: #a5acd3;
+  --radius: 18px;
+  --radius-sm: 11px;
+  --shadow: 0 12px 40px rgba(0, 0, 0, 0.4);
+  --font: 'Segoe UI Variable Text', 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --topbar-bg: rgba(15, 18, 34, 0.6);
+  --cell-pad-y: 10px;
+}
+
+/* Console look: black, monospaced, square, dense */
+:root[data-theme='terminal'] {
+  color-scheme: dark;
+  --bg: #050805;
+  --surface: #0a0f0a;
+  --text-primary: #d6f5d6;
+  --text-secondary: #86b386;
+  --border: #1f3a1f;
+  --grid: #142414;
+  --accent: #39ff7a;
+  --accent-text: #021006;
+  --hover: #102010;
+  --good: #39ff7a;
+  --critical: #ff6b6b;
+  --critical-bg: #2a0d0d;
+  --neutral-mark: #7fbf7f;
+  --radius: 0px;
+  --radius-sm: 0px;
+  --font: ui-monospace, 'Cascadia Mono', 'JetBrains Mono', Consolas, monospace;
+  --font-size: 13px;
+  --heading-transform: uppercase;
+  --heading-spacing: 0.06em;
+  --cell-pad-y: 4px;
+}
+
+/* Editorial: warm paper, serif headings, hairlines */
+:root[data-theme='paper'] {
+  --bg: #f6f1e7;
+  --surface: #fffdf8;
+  --text-primary: #2a2118;
+  --text-secondary: #6b5d4d;
+  --border: #dcd0bc;
+  --grid: #ebe2d2;
+  --accent: #9a3412;
+  --hover: #f3ecdf;
+  --good: #3f6212;
+  --critical: #b42318;
+  --critical-bg: #fbeae5;
+  --neutral-mark: #7a6a55;
+  --radius: 3px;
+  --radius-sm: 3px;
+  --font: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  --font-heading: 'Iowan Old Style', 'Palatino Linotype', Palatino, Georgia, serif;
+  --heading-weight: 700;
+  --topbar-bg: #fffdf8;
+  --cell-pad-y: 9px;
+}
+
+/* Thick outlines, hard shadows, loud accent */
+:root[data-theme='bold'] {
+  --bg: #fff8dc;
+  --surface: #ffffff;
+  --text-primary: #000000;
+  --text-secondary: #3d3d3d;
+  --border: #000000;
+  --border-width: 2px;
+  --grid: #d9d9d9;
+  --accent: #ffd400;
+  --accent-text: #000000;
+  --hover: #fff1a8;
+  --good: #00703c;
+  --critical: #d4002a;
+  --critical-bg: #ffe3e8;
+  --neutral-mark: #000000;
+  --radius: 0px;
+  --radius-sm: 0px;
+  --shadow: 5px 5px 0 #000000;
+  --font: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  --heading-weight: 800;
+  --heading-transform: uppercase;
+  --heading-spacing: 0.02em;
+  --topbar-bg: #ffd400;
+  --topbar-text: #000000;
+  --topbar-muted: #000000;
+  --topbar-hover: #ffffff;
+  --topbar-border: #000000;
+  --cell-pad-y: 9px;
+}
+
+/* Solid coloured header, raised white cards */
+:root[data-theme='indigo'] {
+  --bg: #eef0f8;
+  --surface: #ffffff;
+  --text-primary: #1b1f3b;
+  --text-secondary: #5a6080;
+  --border: #e3e6f2;
+  --grid: #eceef7;
+  --accent: #4338ca;
+  --hover: #eef0fb;
+  --good: #137a4b;
+  --critical: #c62839;
+  --critical-bg: #fdecee;
+  --neutral-mark: #6068a0;
+  --radius: 10px;
+  --radius-sm: 6px;
+  --shadow: 0 1px 3px rgba(27, 31, 59, 0.1), 0 4px 14px rgba(27, 31, 59, 0.07);
+  --font: 'Segoe UI Variable Text', 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --topbar-bg: linear-gradient(90deg, #3730a3, #4f46e5);
+  --topbar-text: #ffffff;
+  --topbar-muted: #d5d8ff;
+  --topbar-hover: rgba(255, 255, 255, 0.16);
+  --topbar-border: transparent;
+  --cell-pad-y: 9px;
+}
+
+/* --- The few things variables cannot express --- */
+
+/* Links in dark styles need the lighter accent to stay readable; primary buttons keep --accent */
+:root[data-theme='bold'] a,
+:root[data-theme='bold'] .link-button { color: #0000c8; text-decoration: underline; }
+:root[data-theme='bold'] .segmented button.active,
+:root[data-theme='bold'] button.primary { color: #000000; }
+:root[data-theme='bold'] button:not(.link-button):not(.icon-button):active { transform: translate(2px, 2px); }
+:root[data-theme='bold'] .tile,
+:root[data-theme='bold'] .panel { box-shadow: var(--shadow); }
+:root[data-theme='bold'] .topbar { border-bottom-width: 3px; }
+
+:root[data-theme='terminal'] .brand::before { content: '> '; color: var(--accent); }
+:root[data-theme='terminal'] .tile-value { color: var(--accent); }
+
+:root[data-theme='midnight'] .tile-value,
+:root[data-theme='aurora'] .tile-value { letter-spacing: -0.02em; }
+
+:root[data-theme='paper'] .data-table th { text-transform: uppercase; letter-spacing: 0.05em; font-size: 11.5px; }
+:root[data-theme='paper'] .topbar { border-bottom: 3px double var(--border); }

@@ -1,0 +1,24 @@
+[Unit]
+Description=ASH Web Viewer
+After=network-online.target postgresql.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ashweb
+Group=ashweb
+WorkingDirectory=/opt/ashweb
+# application.yml in /opt/ashweb/config overrides the defaults built into the jar
+ExecStart=/usr/bin/java -Xmx1g -jar /opt/ashweb/ashweb.jar --spring.config.additional-location=file:/opt/ashweb/config/
+Restart=on-failure
+RestartSec=5
+SuccessExitStatus=143
+
+# Hardening
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+
+[Install]
+WantedBy=multi-user.target
