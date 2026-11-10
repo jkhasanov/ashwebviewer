@@ -13,6 +13,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
+import java.util.function.Consumer;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Service;
@@ -333,6 +334,74 @@ public class ActivityService {
                     summary.attributes().put(rs.getString(1), rs.getString(2));
                 });
         return summary;
+    }
+
+    /** One stored sample: one session that was active at one moment. */
+    public record SampleRow(Instant time, long sessionId, long sessionSerial, String userName, String program,
+                            String sqlId, String sqlOpname, String waitClass, String event,
+                            Map<String, String> details) {
+    }
+
+    /**
+     * Hands the stored samples of a period to the consumer, in time order. detailKeys names the members of
+     * "extra" to deliver with each row; they must be trusted names, they become part of the statement.
+     */
+    public void forEachSample(long targetId, Instant from, Instant to, Filter filter, boolean ascending,
+                              int limit, int offset, List<String> detailKeys, Consumer<SampleRow> consumer) {
+        MapSqlParameterSource params = new MapSqlParameterSource()
+                .addValue("target", targetId)
+                .addValue("from", utc(from))
+                .addValue("to", utc(to))
+                .addValue("limit", limit)
+                .addValue("offset", offset);
+        StringBuilder details = new StringBuilder();
+        for (String key : detailKeys) {
+            if (!key.matches("[A-Za-z]+")) {
+                throw new IllegalArgumentException(key);
+            }
+            details.append(", extra->>'").append(key).append('\'');
+        }
+        String direction = ascending ? "asc" : "desc";
+        String sql = """
+                select sample_time, session_id, session_serial, user_name, program, sql_id, sql_opname,
+                       wait_class, event%1$s
+                  from ash_sample
+                 where target_id = :target and sample_time >= :from and sample_time < :to%2$s
+                 order by sample_time %3$s, session_id, session_serial
+                 limit :limit offset :offset""".formatted(details, filter.conditions(params), direction);
+        jdbc.query(sql, params, rs -> {
+            Map<String, String> values = new LinkedHashMap<>();
+            for (int i = 0; i < detailKeys.size(); i++) {
+                String value = rs.getString(10 + i);
+                if (value != null) {
+                    values.put(detailKeys.get(i), value);
+                }
+            }
+            consumer.accept(new SampleRow(rs.getObject(1, OffsetDateTime.class).toInstant(), rs.getLong(2),
+                    rs.getLong(3), rs.getString(4), rs.getString(5), rs.getString(6), rs.getString(7),
+                    rs.getString(8), rs.getString(9), values));
+        });
+    }
+
+    /** How many samples a period holds, counting no further than cap + 1. */
+    public long countSamples(long targetId, Instant from, Instant to, Filter filter, int cap) {
+        MapSqlParameterSource params = new MapSqlParameterSource()
+                .addValue("target", targetId)
+                .addValue("from", utc(from))
+                .addValue("to", utc(to))
+                .addValue("cap", cap + 1);
+        String sql = """
+                select count(*) from (
+                    select 1 from ash_sample
+                     where target_id = :target and sample_time >= :from and sample_time < :to%s
+                     limit :cap) capped""".formatted(filter.conditions(params));
+        Long count = jdbc.queryForObject(sql, params, Long.class);
+        return count == null ? 0 : count;
+    }
+
+    /** Samples older than this have been removed; only per-minute totals remain. */
+    public Instant samplesKeptSince() {
+        return partitions.rawCutoff();
     }
 
     /** Statement type (SELECT, UPDATE...) as last seen in the samples, or null. */

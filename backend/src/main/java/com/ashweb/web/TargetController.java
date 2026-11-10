@@ -4,6 +4,7 @@ import com.ashweb.activity.ActivityService;
 import com.ashweb.activity.ActivityService.Dimension;
 import com.ashweb.activity.ActivityService.Filter;
 import com.ashweb.activity.ActivityService.OverviewRow;
+import com.ashweb.activity.ActivityService.SampleRow;
 import com.ashweb.activity.ActivityService.SessionInfo;
 import com.ashweb.activity.ActivityService.TimeSeries;
 import com.ashweb.activity.ActivityService.TopResult;
@@ -18,11 +19,21 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
+import java.io.BufferedWriter;
+import java.io.IOException;
+import java.io.OutputStreamWriter;
+import java.io.UncheckedIOException;
+import java.io.Writer;
+import java.nio.charset.StandardCharsets;
 import java.sql.Connection;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -32,6 +43,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
 
 /** Monitored databases: reading is open to every signed-in user, changes need the admin role (SecurityConfig). */
 @RestController
@@ -211,6 +223,112 @@ public class TargetController {
             throw ApiException.notFound("Nothing is stored about this session");
         }
         return info;
+    }
+
+    /** The grid pages through at most this many samples, and a download holds at most this many. */
+    private static final int MAX_SAMPLES = 100_000;
+
+    /**
+     * One page of stored samples.
+     *
+     * @param total       samples in the period, counted up to the limit of the grid
+     * @param totalCapped true when there are more than that
+     * @param keptSince   older samples have been removed
+     * @param detailKeys  the source specific values each row may carry, in display order
+     */
+    public record SamplesPage(Instant from, Instant to, Instant keptSince, List<String> detailKeys, long total,
+                              boolean totalCapped, int offset, List<SampleRow> rows) {
+    }
+
+    @GetMapping("/{id}/samples")
+    public SamplesPage samples(@PathVariable long id, @RequestParam Instant from, @RequestParam Instant to,
+                               @RequestParam(required = false) String waitClass,
+                               @RequestParam(required = false) String sqlId,
+                               @RequestParam(required = false) Long sessionId,
+                               @RequestParam(required = false) Long sessionSerial,
+                               @RequestParam(defaultValue = "desc") String order,
+                               @RequestParam(defaultValue = "200") int limit,
+                               @RequestParam(defaultValue = "0") int offset) {
+        Target target = require(id);
+        checkRange(from, to);
+        Filter filter = new Filter(waitClass, sqlId, sessionId, sessionSerial);
+        List<String> keys = target.dbType().sampleDetails();
+        offset = Math.max(0, Math.min(offset, MAX_SAMPLES));
+        List<SampleRow> rows = new ArrayList<>();
+        activity.forEachSample(id, from, to, filter, order.equals("asc"), Math.max(1, Math.min(limit, 1000)), offset,
+                keys, rows::add);
+        long total = activity.countSamples(id, from, to, filter, MAX_SAMPLES);
+        return new SamplesPage(from, to, activity.samplesKeptSince(), keys, Math.min(total, MAX_SAMPLES),
+                total > MAX_SAMPLES, offset, rows);
+    }
+
+    /** The same samples as a spreadsheet file, oldest first. */
+    @GetMapping("/{id}/samples.csv")
+    public ResponseEntity<StreamingResponseBody> samplesCsv(
+            @PathVariable long id, @RequestParam Instant from, @RequestParam Instant to,
+            @RequestParam(required = false) String waitClass, @RequestParam(required = false) String sqlId,
+            @RequestParam(required = false) Long sessionId, @RequestParam(required = false) Long sessionSerial) {
+        Target target = require(id);
+        checkRange(from, to);
+        Filter filter = new Filter(waitClass, sqlId, sessionId, sessionSerial);
+        List<String> keys = target.dbType().sampleDetails();
+        StreamingResponseBody body = out -> {
+            Writer writer = new BufferedWriter(new OutputStreamWriter(out, StandardCharsets.UTF_8));
+            // The mark makes spreadsheet programs read the file as UTF-8
+            writer.write('\uFEFF');
+            writer.write("sample_time_utc,session_id,session_serial,user_name,program,sql_id,sql_type,wait_class,event");
+            for (String key : keys) {
+                writer.write(',');
+                writer.write(key);
+            }
+            writer.write("\r\n");
+            try {
+                activity.forEachSample(id, from, to, filter, true, MAX_SAMPLES, 0, keys, row -> {
+                    try {
+                        writer.write(row.time().toString());
+                        writer.write("," + row.sessionId() + "," + row.sessionSerial());
+                        for (String text : new String[] {row.userName(), row.program(), row.sqlId(),
+                                row.sqlOpname(), row.waitClass(), row.event()}) {
+                            writer.write(',');
+                            writer.write(csv(text));
+                        }
+                        for (String key : keys) {
+                            writer.write(',');
+                            writer.write(csv(row.details().get(key)));
+                        }
+                        writer.write("\r\n");
+                    } catch (IOException e) {
+                        throw new UncheckedIOException(e);
+                    }
+                });
+            } catch (UncheckedIOException e) {
+                throw e.getCause();
+            }
+            writer.flush();
+        };
+        return ResponseEntity.ok()
+                .contentType(MediaType.parseMediaType("text/csv; charset=UTF-8"))
+                .header(HttpHeaders.CONTENT_DISPOSITION,
+                        "attachment; filename=\"ash-samples-" + id + "-" + from.getEpochSecond() + ".csv\"")
+                .body(body);
+    }
+
+    /**
+     * A value as a CSV field. Values that a spreadsheet would run as a formula get a leading apostrophe,
+     * because program and module names are chosen by whoever connects to the monitored database.
+     */
+    static String csv(String value) {
+        if (value == null || value.isEmpty()) {
+            return "";
+        }
+        if ("=+-@\t\r".indexOf(value.charAt(0)) >= 0) {
+            value = "'" + value;
+        }
+        if (value.indexOf(',') < 0 && value.indexOf('"') < 0 && value.indexOf('\n') < 0
+                && value.indexOf('\r') < 0) {
+            return value;
+        }
+        return '"' + value.replace("\"", "\"\"") + '"';
     }
 
     /** What is stored about a statement: its text and type. Either may be null. */

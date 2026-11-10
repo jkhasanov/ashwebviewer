@@ -1,7 +1,7 @@
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { api, query } from '../api'
+import { api, query, samplesLink } from '../api'
 import type { Target, TimeSeries, TopResult } from '../api'
 import { MAX_EVENT_SERIES, OTHER_EVENTS, eventColor, sortWaitClasses, waitClassColor } from '../colors'
 import { ActivityChart } from '../components/ActivityChart'
@@ -256,7 +256,10 @@ export function TargetPage() {
           {period && <> · {formatRange(period[0], period[1])} ({formatDuration(period[1] - period[0])})</>}
           {waitClass && <> · {waitClass} only</>}
         </span>
-        {selection && <button onClick={clearSelection}>Clear selection</button>}
+        <span className="period-actions">
+          {selection && <button onClick={clearSelection}>Clear selection</button>}
+          {period && <Link to={samplesLink(id, period, { waitClass })}>View samples</Link>}
+        </span>
       </div>
 
       <div className="top-grid">

@@ -18,11 +18,12 @@ once. It is a web re-implementation of the ideas in the desktop tool
   (Oracle) its execution plans and cumulative statistics read live from the database.
 - Session detail: click a session for who it was (user, program, machine, module or client), its activity
   over time and the statements it ran.
+- Raw samples: from any chart, statement or session, open the individual samples behind the selected
+  period, page through them and download them as CSV.
 - Ten visual styles, switchable from the top bar.
 - Admins add, edit, test, start, stop and delete databases, and manage users. Viewers are read-only.
 
-Not yet built: raw sample grid, Oracle ASH report,
-10046 tracing, Oracle Standard Edition, Oracle RAC (`gv$`).
+Not yet built: Oracle ASH report, 10046 tracing, Oracle Standard Edition, Oracle RAC (`gv$`).
 
 ## How it is put together
 

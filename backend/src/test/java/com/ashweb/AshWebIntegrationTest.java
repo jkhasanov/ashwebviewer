@@ -248,6 +248,26 @@ class AshWebIntegrationTest {
         assertThat(send(admin, adminCookies, "GET", "/api/targets/" + targetId + "/session/" + sid + "/1", null)
                 .statusCode()).isEqualTo(404);
 
+        // Raw samples: the rows behind the charts, as pages and as a file
+        String sampleQuery = "?from=" + from + "&to=" + Instant.now() + "&sessionId=" + sid + "&sessionSerial="
+                + serial + "&waitClass=Timeout";
+        Long timeoutSamples = jdbc.queryForObject("""
+                select count(*) from ash_sample
+                 where target_id = ? and session_id = ? and session_serial = ? and wait_class = 'Timeout'""",
+                Long.class, targetId, sid, serial);
+        HttpResponse<String> samples = send(admin, adminCookies, "GET",
+                "/api/targets/" + targetId + "/samples" + sampleQuery + "&limit=3", null);
+        assertThat(samples.statusCode()).as(samples.body()).isEqualTo(200);
+        assertThat(samples.body()).contains("\"total\":" + timeoutSamples + ",").contains("\"event\":\"PgSleep\"")
+                .contains("\"backendType\":\"client backend\"").contains("\"totalCapped\":false");
+        assertThat(samples.body().split("\"event\":", -1)).hasSize(4);
+        HttpResponse<String> csv = send(admin, adminCookies, "GET",
+                "/api/targets/" + targetId + "/samples.csv" + sampleQuery, null);
+        assertThat(csv.statusCode()).as(csv.body()).isEqualTo(200);
+        assertThat(csv.headers().firstValue("Content-Type").orElse("")).startsWith("text/csv");
+        assertThat(csv.body()).contains("sample_time_utc,session_id").contains(",it-load,").contains(",PgSleep,");
+        assertThat(csv.body().strip().split("\r\n")).hasSize((int) (timeoutSamples + 1));
+
         HttpResponse<String> overview = send(admin, adminCookies, "GET", "/api/targets", null);
         assertThat(overview.body()).contains("\"state\":\"RUNNING\"");
     }

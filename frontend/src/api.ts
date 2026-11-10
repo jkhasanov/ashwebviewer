@@ -88,6 +88,31 @@ export interface SessionInfo {
   attributes: Record<string, string>
 }
 
+export interface SampleRow {
+  time: string
+  sessionId: number
+  sessionSerial: number
+  userName: string | null
+  program: string | null
+  sqlId: string
+  sqlOpname: string | null
+  waitClass: string
+  event: string
+  details: Record<string, string>
+}
+
+export interface SamplesPage {
+  from: string
+  to: string
+  /** Older samples have been removed. */
+  keptSince: string
+  detailKeys: string[]
+  total: number
+  totalCapped: boolean
+  offset: number
+  rows: SampleRow[]
+}
+
 export interface SqlStat {
   name: string
   unit: 'count' | 'micros' | 'millis' | 'text'
@@ -179,3 +204,10 @@ export const query = (params: Record<string, string | number | null | undefined>
     .filter(([, v]) => v !== null && v !== undefined && v !== '')
     .map(([k, v]) => `${k}=${encodeURIComponent(String(v))}`)
     .join('&')
+
+/** The address of the raw samples page for a period, narrowed by the given filters. */
+export const samplesLink = (
+  targetId: number,
+  period: [number, number],
+  filters: Record<string, string | number | null | undefined>,
+) => `/db/${targetId}/samples?` + query({ from: Math.floor(period[0]), to: Math.ceil(period[1]), ...filters })
