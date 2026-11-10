@@ -1,6 +1,6 @@
 .tools/
 reference/
-target/
+/backend/target/
 node_modules/
 dist/
 data/
